@@ -372,6 +372,41 @@ function __y360_val(el){
             }})();";
         }
 
+        /// <summary>
+        /// Sayfanın localStorage'ındaki TÜM anahtar/değerleri JSON nesnesi (string) olarak döndürür.
+        /// Motorlar arası oturum köprüsü için (Yolcu360 auth token'ı çerezde değil localStorage'da olabilir).
+        /// </summary>
+        public static string BuildGetLocalStorageScript()
+        {
+            return @"(function(){
+                try {
+                    var o = {};
+                    for (var i = 0; i < localStorage.length; i++) {
+                        var k = localStorage.key(i);
+                        o[k] = localStorage.getItem(k);
+                    }
+                    return JSON.stringify(o);
+                } catch (e) { return '{}'; }
+            })();";
+        }
+
+        /// <summary>
+        /// Verilen JSON nesnesindeki tüm anahtar/değerleri sayfanın localStorage'ına yazar
+        /// (köprülenen oturum token'larını geri yüklemek için). true/false döner.
+        /// </summary>
+        public static string BuildSetLocalStorageScript(string localStorageJson)
+        {
+            return $@"(function(){{
+                try {{
+                    var data = JSON.parse({Json(string.IsNullOrWhiteSpace(localStorageJson) ? "{}" : localStorageJson)});
+                    for (var k in data) {{
+                        if (Object.prototype.hasOwnProperty.call(data, k)) localStorage.setItem(k, data[k]);
+                    }}
+                    return true;
+                }} catch (e) {{ return false; }}
+            }})();";
+        }
+
         /// <summary>Verilen selector listesindeki ilk inputun O ANKİ value'sunu döndürür (lokasyon doğrulama). Yoksa "".</summary>
         public static string BuildGetInputValueScript(string[] selectors)
         {
@@ -819,6 +854,150 @@ function __y360_val(el){
                     }});
                 }});
                 return JSON.stringify(result);
+            }})();";
+        }
+
+        // ============================================================================
+        //  FİRMA DEĞERLENDİRME / MİSAFİR YORUMU OKUMA (salt-okunur)
+        //  Siteye yorum gönderilmez; yalnızca zaten görünen veriler okunur.
+        // ============================================================================
+
+        /// <summary>
+        /// Verilen firma logo UUID'sine sahip İLK araç kartını bulur, "Yorum" tetikleyicisini
+        /// görünür alana kaydırır ve merkez koordinatını (CSS px) döner. Trusted (CDP) tıklama için.
+        /// JSON: { found:bool, x:number, y:number }.
+        /// </summary>
+        public static string BuildFindReviewTriggerScript(string supplierUuid, string[] cardSelectors, string[] logoSelectors, string[] triggerSelectors)
+        {
+            return $@"(function(){{
+                {LibPreamble}
+                var uuid = {Json(supplierUuid)};
+                var cardSels = {Json(cardSelectors)};
+                var logoSels = {Json(logoSelectors)};
+                var trigSels = {Json(triggerSelectors)};
+                var cards = [];
+                for (var i=0;i<cardSels.length;i++){{ try{{ var f=document.querySelectorAll(cardSels[i]); if(f.length>0){{ cards=Array.prototype.slice.call(f); break; }} }}catch(e){{}} }}
+                var target=null;
+                for (var c=0;c<cards.length;c++){{
+                    var logo=__y360_firstIn(cards[c], logoSels);
+                    var src=logo?(logo.getAttribute('src')||logo.getAttribute('data-src')||''):'';
+                    if (uuid && src.indexOf(uuid)>=0){{ target=cards[c]; break; }}
+                }}
+                if (!target) return JSON.stringify({{ found:false }});
+                var trig=__y360_firstIn(target, trigSels);
+                if (!trig) return JSON.stringify({{ found:false }});
+                try {{ trig.scrollIntoView({{block:'center'}}); }} catch(e){{}}
+                var r=trig.getBoundingClientRect();
+                return JSON.stringify({{ found:true, x:(r.left+r.width/2), y:(r.top+r.height/2) }});
+            }})();";
+        }
+
+        /// <summary>UUID eşleşen kartın "Yorum" tetikleyicisine JS click gönderir (CDP tıklama yedeği).</summary>
+        public static string BuildClickReviewTriggerScript(string supplierUuid, string[] cardSelectors, string[] logoSelectors, string[] triggerSelectors)
+        {
+            return $@"(function(){{
+                {LibPreamble}
+                var uuid = {Json(supplierUuid)};
+                var cardSels = {Json(cardSelectors)};
+                var logoSels = {Json(logoSelectors)};
+                var trigSels = {Json(triggerSelectors)};
+                var cards = [];
+                for (var i=0;i<cardSels.length;i++){{ try{{ var f=document.querySelectorAll(cardSels[i]); if(f.length>0){{ cards=Array.prototype.slice.call(f); break; }} }}catch(e){{}} }}
+                for (var c=0;c<cards.length;c++){{
+                    var logo=__y360_firstIn(cards[c], logoSels);
+                    var src=logo?(logo.getAttribute('src')||logo.getAttribute('data-src')||''):'';
+                    if (uuid && src.indexOf(uuid)>=0){{
+                        var trig=__y360_firstIn(cards[c], trigSels);
+                        if (trig){{ try{{ trig.click(); }}catch(e){{}} return true; }}
+                    }}
+                }}
+                return false;
+            }})();";
+        }
+
+        /// <summary>Değerlendirme modalı açık mı?</summary>
+        public static string BuildIsReviewModalOpenScript(string[] modalSelectors)
+        {
+            return $@"(function(){{ {LibPreamble} return !!__y360_first({Json(modalSelectors)}); }})();";
+        }
+
+        /// <summary>Modaldaki kapatma (×) düğmesine tıklar.</summary>
+        public static string BuildCloseReviewModalScript(string[] closeSelectors)
+        {
+            return $@"(function(){{
+                {LibPreamble}
+                var el=__y360_first({Json(closeSelectors)});
+                if (el){{ try{{ el.click(); }}catch(e){{}} return true; }}
+                return false;
+            }})();";
+        }
+
+        /// <summary>
+        /// Açık değerlendirme modalından firma özetini ve ilk <paramref name="maxReviews"/> yorumu okur.
+        /// Alt puanlar yeşil ilerleme çubuğunun width:% değerinden (rating = %/20) çıkarılır.
+        /// Yorum metinleri p.text-sm.font-semibold.text-black üzerinden alınır (kırılgan renk
+        /// sınıflarına dokunmadan). JSON döner.
+        /// </summary>
+        public static string BuildScrapeReviewModalScript(string[] modalSelectors, int maxReviews)
+        {
+            return $@"(function(){{
+                {LibPreamble}
+                var modal = __y360_first({Json(modalSelectors)});
+                if (!modal) return JSON.stringify({{ found:false }});
+
+                function num(s){{ if(!s) return 0; var m=String(s).replace(',','.').match(/-?\d+(\.\d+)?/); return m?parseFloat(m[0]):0; }}
+                function ratingFromKey(key){{
+                    var lbl = modal.querySelector('[data-cms-key=""'+key+'""]');
+                    if(!lbl) return 0;
+                    var box = lbl.parentElement || lbl;
+                    var bar = box.querySelector('div[style*=""width""]');
+                    if(bar){{ var m=(bar.getAttribute('style')||'').match(/width:\s*([\d.]+)%/); if(m) return Math.round(parseFloat(m[1])/20*10)/10; }}
+                    var t=(box.innerText||''); var nm=t.match(/([\d]+[.,][\d]+)\s*$/); if(nm) return num(nm[1]);
+                    return 0;
+                }}
+
+                var supplierName=''; var loc='';
+                var snEl = modal.querySelector('.text-base .text-steel.font-semibold'); if(snEl) supplierName=(snEl.innerText||'').trim();
+                var locEl = modal.querySelector('.text-base .font-bold.text-dark-gray'); if(locEl) loc=(locEl.innerText||'').trim();
+
+                var overall=0;
+                var ovEl = modal.querySelector('.text-white.font-bold.rounded-md'); if(ovEl) overall=num(ovEl.innerText);
+
+                var count=0;
+                var all = modal.querySelectorAll('*');
+                for(var i=0;i<all.length;i++){{
+                    var el=all[i];
+                    if(el.children.length===0){{
+                        var tx=(el.textContent||'').trim();
+                        if(/^\d[\d.]*\s*Yorum$/i.test(tx)){{ count=parseInt(tx.replace(/[^\d]/g,''),10)||0; break; }}
+                    }}
+                }}
+
+                var reviews=[];
+                var ps = modal.querySelectorAll('p.text-sm.font-semibold.text-black');
+                for(var j=0;j<ps.length && reviews.length<{maxReviews};j++){{
+                    var p=ps[j];
+                    var comment=(p.innerText||'').trim();
+                    if(!comment) continue;
+                    var card=p.parentElement;
+                    for(var k=0;k<3 && card && !card.querySelector('.w-12.rounded-full');k++){{ card=card.parentElement; }}
+                    var author=''; var date=''; var rating=0;
+                    if(card){{
+                        var aEl=card.querySelector('.w-12.rounded-full'); if(aEl) author=(aEl.innerText||'').trim();
+                        var dEl=card.querySelector('.text-sm.text-steel'); if(dEl) date=(dEl.innerText||'').trim();
+                        var rEl=card.querySelector('.text-white.font-bold.rounded-md'); if(rEl) rating=num(rEl.innerText);
+                    }}
+                    reviews.push({{ author:author, date:date, rating:rating, comment:comment }});
+                }}
+
+                return JSON.stringify({{
+                    found:true, supplierName:supplierName, location:loc,
+                    overall:overall, count:count,
+                    cleanliness:ratingFromKey('comment_rating_text1'),
+                    delivery:ratingFromKey('comment_rating_text2'),
+                    staff:ratingFromKey('comment_rating_text3'),
+                    reviews:reviews
+                }});
             }})();";
         }
     }

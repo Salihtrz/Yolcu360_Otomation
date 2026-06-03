@@ -6,6 +6,7 @@ using Yolcu360.BusinessLayer.Abstract;
 using Yolcu360.BusinessLayer.Helpers;
 using Yolcu360.Common.Helpers;
 using Yolcu360.Common.Logging;
+using Yolcu360.DtoLayer.BrowserDto;
 
 namespace Yolcu360.BusinessLayer.Concrete
 {
@@ -38,9 +39,12 @@ namespace Yolcu360.BusinessLayer.Concrete
                 // bayrakları tutarsızlık yaratıp puanı DÜŞÜRÜYORDU; hepsi kaldırıldı.)
                 // CachePath + PersistSessionCookies yalnızca oturumun kalıcı olması içindir
                 // (manuel login sonrası aynı session); bunlar standart kalıcılık ayarlarıdır.
+                // Cache %AppData%\Yolcu360_Otomation\CefCache altında tutulur (cookie/session/localStorage kalıcı).
                 var settings = new CefSettings
                 {
-                    CachePath = Path.Combine(AppContext.BaseDirectory, "CefCache"),
+                    CachePath = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                        "Yolcu360_Otomation", "CefCache"),
                     PersistSessionCookies = true
                 };
 
@@ -53,15 +57,66 @@ namespace Yolcu360.BusinessLayer.Concrete
                 Dock = DockStyle.Fill,
                 Visible = _visible
             };
-            _browser.LoadingStateChanged += (s, e) =>
+            // VIEWPORT KİLİDİ + sayfa yüklendi logu. Yolcu360 responsive — pencere büyütülünce site
+            // masaüstü layout'una geçip selector'ları kırıyordu (takvim/saat/filtre). CDP (DevTools)
+            // Emulation.setDeviceMetricsOverride ile sabit CSS viewport (1000 = tablet) zorlanır; her
+            // TAM yüklemede (idempotent) uygulanır. DevTools çağrısı CEF UI thread'ine marshal edilir
+            // (erken/yanlış thread çağrısı ExecutionEngineException ile çökertiyordu).
+            _browser.LoadingStateChanged += async (s, e) =>
             {
                 if (!e.IsLoading)
+                {
                     LogHelper.Info($"Sayfa yüklendi: {_browser.Address}");
+                    await ApplyViewportLockAsync();
+                }
             };
 
             IsInitialized = true;
             LogHelper.Info($"Yolcu360 tarayıcı kontrolü oluşturuldu ({url}).");
             return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// CDP (DevTools) Emulation.setDeviceMetricsOverride ile sabit bir CSS viewport zorlar
+        /// (genişlik 1000 = tablet aralığı: site, selector'larımızın doğrulandığı layout'u render eder).
+        /// Pencere büyütülse/küçültülse bile site DOM'u değişmez. Best-effort: hata olursa yalnızca loglanır.
+        /// </summary>
+        private async Task ApplyViewportLockAsync()
+        {
+            try
+            {
+                await DevToolsAsync("Emulation.setDeviceMetricsOverride",
+                    new Dictionary<string, object>
+                    {
+                        ["width"] = 1000,
+                        ["height"] = 980,
+                        ["deviceScaleFactor"] = 1,
+                        ["mobile"] = false
+                    });
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Warning("Viewport kilidi uygulanamadı (CEF): " + ex.Message);
+            }
+        }
+
+        // CDP/DevTools çağrıları IBrowserHost.ExecuteDevToolsMethod ile yapılır. ÖNEMLİ: bu çağrı
+        // CEF UI THREAD'inde olmalı; aksi halde ExecutionEngineException (ölümcül native crash) olur.
+        // Bu yüzden gerekirse Cef.UIThreadTaskFactory ile marshal edilir.
+        private int _devToolsMsgId;
+
+        private async Task DevToolsAsync(string method, IDictionary<string, object> parameters)
+        {
+            var host = _browser?.GetBrowser()?.GetHost();
+            if (host == null) return;
+
+            void Invoke() => host.ExecuteDevToolsMethod(
+                System.Threading.Interlocked.Increment(ref _devToolsMsgId), method, parameters);
+
+            if (Cef.CurrentlyOnThread(CefThreadIds.TID_UI))
+                Invoke();
+            else
+                await Cef.UIThreadTaskFactory.StartNew(Invoke);
         }
 
         public Task LoadUrlAsync(string url, CancellationToken ct = default)
@@ -139,22 +194,39 @@ namespace Yolcu360.BusinessLayer.Concrete
             return ok;
         }
 
-        public Task<bool> RealClickAtAsync(double x, double y, CancellationToken ct = default)
+        public async Task<bool> RealClickAtAsync(double x, double y, CancellationToken ct = default)
         {
             EnsureInitialized();
             try
             {
-                var host = _browser.GetBrowserHost();
-                host.SendMouseMoveEvent((int)x, (int)y, false, CefEventFlags.None);
-                host.SendMouseClickEvent((int)x, (int)y, MouseButtonType.Left, false, 1, CefEventFlags.None);
-                host.SendMouseClickEvent((int)x, (int)y, MouseButtonType.Left, true, 1, CefEventFlags.None);
-                return Task.FromResult(true);
+                ct.ThrowIfCancellationRequested();
+                // Gerçek (trusted) fare olayları: CDP (DevTools) Input.dispatchMouseEvent. Koordinatlar
+                // CSS px (getBoundingClientRect ile aynı, viewport override düzleminde). Bazı Vue
+                // widget'ları (ör. saat menüsü) JS ile dispatch edilen (isTrusted=false) olaylara
+                // tepki vermez; bu yöntem gerçek girişle çözer. move → press → release.
+                await DispatchMouseAsync("mouseMoved", x, y, withButton: false);
+                await DispatchMouseAsync("mousePressed", x, y, withButton: true);
+                await DispatchMouseAsync("mouseReleased", x, y, withButton: true);
+                return true;
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
-                LogHelper.Warning("CEF gerçek tıklama hatası: " + ex.Message);
-                return Task.FromResult(false);
+                LogHelper.Warning("CEF gerçek tıklama (CDP) hatası: " + ex.Message);
+                return false;
             }
+        }
+
+        private async Task DispatchMouseAsync(string type, double x, double y, bool withButton)
+        {
+            var p = new Dictionary<string, object> { ["type"] = type, ["x"] = x, ["y"] = y };
+            if (withButton)
+            {
+                p["button"] = "left";
+                p["buttons"] = 1;
+                p["clickCount"] = 1;
+            }
+            await DevToolsAsync("Input.dispatchMouseEvent", p);
         }
 
         public async Task<bool> SetInputValueAsync(string[] selectors, string value, CancellationToken ct = default)
@@ -239,7 +311,10 @@ namespace Yolcu360.BusinessLayer.Concrete
 
             try
             {
-                await _browser.GetBrowserHost().RequestContext.ClearHttpAuthCredentialsAsync();
+                // GetBrowserHost()/RequestContext tarayıcı tam başlatılmamışsa null olabilir → null-güvenli.
+                var ctx = _browser?.GetBrowser()?.GetHost()?.RequestContext;
+                if (ctx != null)
+                    await ctx.ClearHttpAuthCredentialsAsync();
             }
             catch (Exception ex)
             {
@@ -249,9 +324,11 @@ namespace Yolcu360.BusinessLayer.Concrete
 
         public async Task ClearSiteSessionAsync(CancellationToken ct = default)
         {
-            // YUMUŞAK ÇIKIŞ: yalnızca Yolcu360 alan adı çerezleri + storage temizlenir;
-            // Google/reCAPTCHA çerezlerine (null alan = tümü) DOKUNULMAZ.
+            // YUMUŞAK ÇIKIŞ: yalnızca Yolcu360 alan adının çerezleri + storage temizlenir.
+            // Google/reCAPTCHA güven çerezlerine (farklı alan adı) DOKUNULMAZ → çıkış sonrası tekrar
+            // girişte reCAPTCHA seni "şüpheli yeni tarayıcı" sayıp engellemez.
             EnsureInitialized();
+
             try
             {
                 await SafeEvaluateAsync(@"(function(){
@@ -259,8 +336,16 @@ namespace Yolcu360.BusinessLayer.Concrete
                     try { sessionStorage.clear(); } catch(e) {}
                     return true;
                 })();", ct);
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Warning("CEF storage temizlenemedi (yumuşak çıkış): " + ex.Message);
+            }
 
+            try
+            {
                 var manager = Cef.GetGlobalCookieManager();
+                // SADECE Yolcu360 alan adı çerezleri (null,null = TÜM çerezler KULLANILMAZ).
                 await manager.DeleteCookiesAsync("https://www.yolcu360.com", null);
                 await manager.DeleteCookiesAsync("https://yolcu360.com", null);
                 await manager.FlushStoreAsync();
@@ -270,6 +355,47 @@ namespace Yolcu360.BusinessLayer.Concrete
             {
                 LogHelper.Warning("CEF yumuşak çıkış tamamlanamadı: " + ex.Message);
             }
+        }
+
+        public async Task<List<BrowserCookieDto>> ExportCookiesAsync(string url, CancellationToken ct = default)
+        {
+            var result = new List<BrowserCookieDto>();
+            try
+            {
+                var manager = Cef.GetGlobalCookieManager();
+                var cookies = await manager.VisitUrlCookiesAsync(url, true);
+                if (cookies != null)
+                    foreach (var c in cookies)
+                        result.Add(new BrowserCookieDto
+                        {
+                            Name = c.Name, Value = c.Value, Domain = c.Domain, Path = c.Path,
+                            Secure = c.Secure, HttpOnly = c.HttpOnly, Expires = c.Expires
+                        });
+            }
+            catch (Exception ex) { LogHelper.Warning("CEF çerez export hatası: " + ex.Message); }
+            return result;
+        }
+
+        public async Task ImportCookiesAsync(string url, List<BrowserCookieDto> cookies, CancellationToken ct = default)
+        {
+            if (cookies == null || cookies.Count == 0) return;
+            try
+            {
+                var manager = Cef.GetGlobalCookieManager();
+                int ok = 0;
+                foreach (var c in cookies)
+                {
+                    var cef = new Cookie
+                    {
+                        Name = c.Name, Value = c.Value, Domain = c.Domain, Path = c.Path,
+                        Secure = c.Secure, HttpOnly = c.HttpOnly, Expires = c.Expires
+                    };
+                    if (await manager.SetCookieAsync(url, cef)) ok++;
+                }
+                await manager.FlushStoreAsync();
+                LogHelper.Info($"CEF'e {ok}/{cookies.Count} oturum çerezi köprülendi.");
+            }
+            catch (Exception ex) { LogHelper.Warning("CEF çerez import hatası: " + ex.Message); }
         }
 
         public void SetBrowserVisible(bool visible)

@@ -1,4 +1,5 @@
 ﻿using System.Windows.Forms;
+using Yolcu360.DtoLayer.BrowserDto;
 
 namespace Yolcu360.BusinessLayer.Abstract
 {
@@ -31,7 +32,7 @@ namespace Yolcu360.BusinessLayer.Abstract
         /// <summary>
         /// Viewport koordinatına (CSS px) GERÇEK (trusted) fare tıklaması gönderir. JS ile dispatch
         /// edilen olaylar isTrusted=false olduğu için bazı SPA widget'ları (ör. Yolcu360 saat seçici)
-        /// tepki vermez; bu metot gerçek girişle (WebView2: CDP Input.dispatchMouseEvent) çözer.
+        /// tepki vermez; bu metot gerçek girişle (CefSharp: CDP Input.dispatchMouseEvent) çözer.
         /// </summary>
         Task<bool> RealClickAtAsync(double x, double y, CancellationToken ct = default);
         Task<bool> SetInputValueAsync(string[] selectors, string value, CancellationToken ct = default);
@@ -64,5 +65,11 @@ namespace Yolcu360.BusinessLayer.Abstract
         /// muamelesi yapıp düşük puan vermez (recaptcha_score_too_low azalır).
         /// </summary>
         Task ClearSiteSessionAsync(CancellationToken ct = default);
+
+        /// <summary>Verilen URL için geçerli oturum çerezlerini dışa aktarır (motorlar arası köprü için).</summary>
+        Task<List<BrowserCookieDto>> ExportCookiesAsync(string url, CancellationToken ct = default);
+
+        /// <summary>Verilen çerezleri bu tarayıcı motoruna yükler (URL alan adına yazar).</summary>
+        Task ImportCookiesAsync(string url, List<BrowserCookieDto> cookies, CancellationToken ct = default);
     }
 }

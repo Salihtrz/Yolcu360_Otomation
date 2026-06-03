@@ -10,6 +10,8 @@
 
   <ItemGroup>
     <PackageReference Include="CefSharp.WinForms.NETCore" Version="147.0.100" />
+    <!-- WebView2 yalnızca GİRİŞ (login) akışı için: gerçek Edge runtime reCAPTCHA'yı geçer.
+         Otomasyon/arama CefSharp ile yapılır; giriş sonrası oturum çerezleri CefSharp'a köprülenir. -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3967.48" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="ClosedXML" Version="0.104.2" />

@@ -4,6 +4,7 @@ using Yolcu360.Common.Constants;
 using Yolcu360.Common.Logging;
 using Yolcu360.DtoLayer.CarResultDto;
 using Yolcu360.DtoLayer.ReportDto;
+using Yolcu360.DtoLayer.ReviewDto;
 using Yolcu360.DtoLayer.SearchDto;
 using Yolcu360.PresentationLayer.Forms;
 using Yolcu360.PresentationLayer.Helpers;
@@ -69,6 +70,25 @@ namespace Yolcu360.PresentationLayer
         private Label _lblCarTitle;
         private PictureBox _picCar;
         private Panel _browserHost;
+
+        // ---- Firma değerlendirme / misafir yorumu paneli (Seçili Araç kartı) ----
+        private Label _lblRvOverall;     // büyük genel puan (ör. 4.6)
+        private Label _lblRvStars;       // ★★★★☆
+        private Label _lblRvCount;       // "4.6 / 5 · 400 yorum"
+        private Label _lblRvSupplier;    // firma adı
+        private Label _lblRvClean, _lblRvDelivery, _lblRvStaff;     // alt puan değerleri
+        private Panel _barRvClean, _barRvDelivery, _barRvStaff;     // bar dolgu panelleri
+        private Panel _trackRvClean, _trackRvDelivery, _trackRvStaff; // bar arka planı
+        private Guna2Panel _rvCardBox;   // yorum kartı kutusu
+        private Control _rvNav;          // ◀ x/y ▶ navigasyon çubuğu
+        private Label _lblRvState;       // boş/yükleniyor durum metni (kartı kaplar)
+        private Label _lblRvAuthor, _lblRvDate, _lblRvRating, _lblRvIndex;
+        private TextBox _txtRvComment;
+        private Guna2Button _btnRvPrev, _btnRvNext;
+        private List<SupplierReviewDto> _currentReviews = new();
+        private int _rvIndex;
+        private CancellationTokenSource _reviewCts;
+        private readonly Dictionary<string, SupplierReviewSummaryDto> _supplierReviewCache = new(StringComparer.OrdinalIgnoreCase);
 
         public MainForm()
         {
@@ -246,7 +266,9 @@ namespace Yolcu360.PresentationLayer
             layout.Controls.Add(UiStyleHelper.Card("Arac Sonuclari", BuildGridPanel()), 0, 1);
             layout.SetColumnSpan(layout.GetControlFromPosition(0, 1), 2);
             layout.Controls.Add(UiStyleHelper.Card("Ozet Istatistikler", BuildStatsPanel()), 0, 2);
-            layout.Controls.Add(UiStyleHelper.Card("Secili Arac", BuildSelectedCarPanel()), 1, 2);
+            var selCard = UiStyleHelper.Card("Secili Arac & Firma Degerlendirmesi", BuildSelectedCarPanel());
+            layout.Controls.Add(selCard, 1, 2);
+            layout.SetRowSpan(selCard, 2); // değerlendirme paneli için 2 satır yüksekliği (250+220)
             scroll.Controls.Add(layout);
             return scroll;
         }
@@ -523,16 +545,223 @@ namespace Yolcu360.PresentationLayer
 
         private Control BuildSelectedCarPanel()
         {
-            var p = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
-            _picCar = new PictureBox { Dock = DockStyle.Left, Width = 180, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.White };
-            _lblCarTitle = new Label { Dock = DockStyle.Fill, Text = "-", Font = new Font("Segoe UI", 12f, FontStyle.Bold), ForeColor = ThemeColors.TextDark, Padding = new Padding(18) };
-            p.Controls.Add(_lblCarTitle);
-            p.Controls.Add(_picCar);
-            return p;
+            // Dikey yerleşim: [araç görseli+başlık] / [genel puan] / [alt puanlar] / [yorum carousel]
+            var root = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 4,
+                BackColor = Color.Transparent
+            };
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 84));   // araç görseli + başlık
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));   // genel puan başlığı
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));   // alt puanlar
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));   // yorum carousel
+
+            // --- Üst: araç görseli + başlık ---
+            var top = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+            _picCar = new PictureBox { Dock = DockStyle.Left, Width = 110, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.White };
+            _lblCarTitle = new Label { Dock = DockStyle.Fill, Text = "-", Font = new Font("Segoe UI", 11f, FontStyle.Bold), ForeColor = ThemeColors.TextDark, Padding = new Padding(12, 4, 4, 4), TextAlign = ContentAlignment.MiddleLeft };
+            top.Controls.Add(_lblCarTitle); // Fill önce
+            top.Controls.Add(_picCar);
+
+            // --- Genel puan başlığı ---
+            var head = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+            _lblRvOverall = new Label { Dock = DockStyle.Left, Width = 88, Text = "-", Font = new Font("Segoe UI", 19f, FontStyle.Bold), ForeColor = ThemeColors.Primary, TextAlign = ContentAlignment.MiddleCenter, AutoEllipsis = false };
+            var headRight = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+            _lblRvCount = new Label { Dock = DockStyle.Top, Height = 16, Text = "", Font = new Font("Segoe UI", 8.5f), ForeColor = ThemeColors.TextMuted };
+            _lblRvStars = new Label { Dock = DockStyle.Top, Height = 20, Text = "", Font = new Font("Segoe UI", 13f), ForeColor = ThemeColors.Warning };
+            _lblRvSupplier = new Label { Dock = DockStyle.Top, Height = 18, Text = "-", Font = new Font("Segoe UI", 10f, FontStyle.Bold), ForeColor = ThemeColors.TextDark };
+            headRight.Controls.Add(_lblRvCount);   // Top dock: son eklenen en üstte → ters sırada ekle
+            headRight.Controls.Add(_lblRvStars);
+            headRight.Controls.Add(_lblRvSupplier);
+            head.Controls.Add(headRight);          // Fill önce
+            head.Controls.Add(_lblRvOverall);
+
+            // --- Alt puanlar (temizlik / teslimat / personel) ---
+            var subs = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding(0, 4, 0, 4) };
+            var rStaff = BuildRatingRow("Personel", out _lblRvStaff, out _barRvStaff, out _trackRvStaff);
+            var rDelivery = BuildRatingRow("Teslimat Hizi", out _lblRvDelivery, out _barRvDelivery, out _trackRvDelivery);
+            var rClean = BuildRatingRow("Temizlik", out _lblRvClean, out _barRvClean, out _trackRvClean);
+            subs.Controls.Add(rStaff);     // Top dock → ters sırada ekle (Temizlik en üstte)
+            subs.Controls.Add(rDelivery);
+            subs.Controls.Add(rClean);
+
+            // --- Yorum carousel ---
+            var carousel = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding(0, 6, 0, 0) };
+
+            _rvNav = BuildReviewNav();
+
+            _rvCardBox = new Guna2Panel
+            {
+                Dock = DockStyle.Fill,
+                FillColor = ThemeColors.Background,
+                BorderRadius = 10,
+                BorderColor = ThemeColors.Border,
+                BorderThickness = 1,
+                Padding = new Padding(12, 8, 12, 8)
+            };
+            _txtRvComment = new TextBox
+            {
+                Dock = DockStyle.Fill,
+                Multiline = true,
+                ReadOnly = true,
+                BorderStyle = BorderStyle.None,
+                BackColor = ThemeColors.Background,
+                ForeColor = ThemeColors.TextDark,
+                Font = new Font("Segoe UI", 9.75f),
+                ScrollBars = ScrollBars.Vertical,
+                Cursor = Cursors.Default,
+                TabStop = false
+            };
+            var rvHdr = new Panel { Dock = DockStyle.Top, Height = 24, BackColor = Color.Transparent };
+            _lblRvRating = new Label { Dock = DockStyle.Right, Width = 70, Text = "", Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = ThemeColors.Warning, TextAlign = ContentAlignment.MiddleRight };
+            _lblRvDate = new Label { Dock = DockStyle.Right, Width = 120, Text = "", Font = new Font("Segoe UI", 8.5f), ForeColor = ThemeColors.TextMuted, TextAlign = ContentAlignment.MiddleRight };
+            _lblRvAuthor = new Label { Dock = DockStyle.Fill, Text = "", Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = ThemeColors.TextDark, TextAlign = ContentAlignment.MiddleLeft };
+            rvHdr.Controls.Add(_lblRvRating); // Right: ilk eklenen en sağda
+            rvHdr.Controls.Add(_lblRvDate);
+            rvHdr.Controls.Add(_lblRvAuthor); // Fill
+            _rvCardBox.Controls.Add(_txtRvComment); // Fill önce
+            _rvCardBox.Controls.Add(rvHdr);
+
+            _lblRvState = new Label
+            {
+                Dock = DockStyle.Fill,
+                Text = "Bir arac secince firma degerlendirmeleri burada gorunur.",
+                TextAlign = ContentAlignment.MiddleCenter,
+                ForeColor = ThemeColors.TextMuted,
+                Font = new Font("Segoe UI", 9.5f),
+                BackColor = ThemeColors.Surface
+            };
+
+            carousel.Controls.Add(_rvCardBox); // Fill (kalan)
+            carousel.Controls.Add(_rvNav);     // Bottom
+            carousel.Controls.Add(_lblRvState);// Fill (üstte; görünürken kaplar)
+
+            root.Controls.Add(top, 0, 0);
+            root.Controls.Add(head, 0, 1);
+            root.Controls.Add(subs, 0, 2);
+            root.Controls.Add(carousel, 0, 3);
+
+            ShowReviewState("Bir arac secince firma degerlendirmeleri burada gorunur.");
+            return root;
+        }
+
+        /// <summary>Alt puan satırı: etiket + mini ilerleme çubuğu + sayısal değer.</summary>
+        private Panel BuildRatingRow(string caption, out Label valueLabel, out Panel fill, out Panel track)
+        {
+            var row = new Panel { Dock = DockStyle.Top, Height = 28, BackColor = Color.Transparent };
+            var cap = new Label { Text = caption, AutoSize = false, Width = 96, Dock = DockStyle.Left, ForeColor = ThemeColors.TextMuted, Font = UiStyleHelper.LabelFont, TextAlign = ContentAlignment.MiddleLeft };
+            valueLabel = new Label { Text = "-", AutoSize = false, Width = 42, Dock = DockStyle.Right, ForeColor = ThemeColors.TextDark, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), TextAlign = ContentAlignment.MiddleRight };
+            var holder = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding(4, 10, 8, 10) };
+            track = new Panel { Dock = DockStyle.Fill, BackColor = ThemeColors.Background };
+            fill = new Panel { Dock = DockStyle.Left, Width = 0, BackColor = ThemeColors.Success, Tag = 0.0 };
+            var fillRef = fill; var trackRef = track;
+            track.Controls.Add(fill);
+            track.Resize += (s, e) => ApplyBar(fillRef, trackRef);
+            holder.Controls.Add(track);
+            row.Controls.Add(holder);      // Fill (kalan)
+            row.Controls.Add(valueLabel);  // Right
+            row.Controls.Add(cap);         // Left
+            return row;
+        }
+
+        private static void ApplyBar(Panel fill, Panel track)
+        {
+            var v = fill.Tag is double d ? d : 0.0;
+            fill.Width = (int)(track.ClientSize.Width * Math.Clamp(v, 0, 5) / 5.0);
+        }
+
+        private void SetBar(Panel fill, Panel track, Label valueLabel, double value)
+        {
+            fill.Tag = value;
+            valueLabel.Text = value > 0 ? value.ToString("0.0") : "-";
+            ApplyBar(fill, track);
+        }
+
+        /// <summary>◀ "x / y" ▶ navigasyon çubuğu.</summary>
+        private Control BuildReviewNav()
+        {
+            var nav = new TableLayoutPanel { Dock = DockStyle.Bottom, Height = 36, ColumnCount = 3, RowCount = 1, BackColor = Color.Transparent };
+            nav.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 46));
+            nav.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            nav.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 46));
+            _btnRvPrev = UiStyleHelper.Button("◀", ButtonVariant.Secondary, 40, 28);
+            _btnRvPrev.Click += (s, e) => ShowReviewAt(_rvIndex - 1);
+            _btnRvNext = UiStyleHelper.Button("▶", ButtonVariant.Secondary, 40, 28);
+            _btnRvNext.Click += (s, e) => ShowReviewAt(_rvIndex + 1);
+            _lblRvIndex = new Label { Dock = DockStyle.Fill, Text = "0 / 0", TextAlign = ContentAlignment.MiddleCenter, ForeColor = ThemeColors.TextMuted, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
+            nav.Controls.Add(_btnRvPrev, 0, 0);
+            nav.Controls.Add(_lblRvIndex, 1, 0);
+            nav.Controls.Add(_btnRvNext, 2, 0);
+            return nav;
+        }
+
+        private static string StarString(double rating)
+        {
+            var r = (int)Math.Round(Math.Clamp(rating, 0, 5), MidpointRounding.AwayFromZero);
+            return new string('★', r) + new string('☆', 5 - r);
+        }
+
+        /// <summary>Carousel'i gizleyip ortada durum metni gösterir (boş / yükleniyor / hata).</summary>
+        private void ShowReviewState(string message)
+        {
+            if (_lblRvState == null) return;
+            _lblRvState.Text = message;
+            _lblRvState.Visible = true;
+            _lblRvState.BringToFront();
+        }
+
+        private void ShowReviewLoading() => ShowReviewState("Degerlendirmeler yukleniyor...");
+
+        /// <summary>Firma değerlendirme özetini panele basar (genel puan, alt puanlar, yorumlar).</summary>
+        private void RenderReviewSummary(SupplierReviewSummaryDto s)
+        {
+            if (s == null) { ShowReviewState("Degerlendirme bilgisi bulunamadi."); return; }
+
+            _lblRvOverall.Text = s.OverallRating > 0 ? s.OverallRating.ToString("0.0") : "-";
+            _lblRvStars.Text = StarString(s.OverallRating);
+            var supplier = string.IsNullOrWhiteSpace(s.SupplierName) ? "Firma" : s.SupplierName;
+            _lblRvSupplier.Text = s.IsSampleData ? supplier + "  ·  ornek veri" : supplier;
+            _lblRvCount.Text = s.OverallRating > 0
+                ? $"{s.OverallRating:0.0} / 5" + (s.ReviewCount > 0 ? $"  ·  {s.ReviewCount} yorum" : "")
+                : (s.ReviewCount > 0 ? $"{s.ReviewCount} yorum" : "");
+
+            SetBar(_barRvClean, _trackRvClean, _lblRvClean, s.CleanlinessRating);
+            SetBar(_barRvDelivery, _trackRvDelivery, _lblRvDelivery, s.DeliverySpeedRating);
+            SetBar(_barRvStaff, _trackRvStaff, _lblRvStaff, s.StaffRating);
+
+            _currentReviews = s.Reviews ?? new List<SupplierReviewDto>();
+            _rvIndex = 0;
+            if (_currentReviews.Count == 0)
+            {
+                ShowReviewState("Bu firma icin yorum bulunamadi.");
+            }
+            else
+            {
+                _lblRvState.Visible = false;
+                ShowReviewAt(0);
+            }
+        }
+
+        /// <summary>Carousel'de belirtilen indeksli yorumu gösterir.</summary>
+        private void ShowReviewAt(int index)
+        {
+            if (_currentReviews.Count == 0) { ShowReviewState("Bu firma icin yorum bulunamadi."); return; }
+            _rvIndex = Math.Clamp(index, 0, _currentReviews.Count - 1);
+            var r = _currentReviews[_rvIndex];
+            _lblRvAuthor.Text = string.IsNullOrWhiteSpace(r.AuthorName) ? "Misafir" : r.AuthorName;
+            _lblRvDate.Text = r.ReviewDate ?? "";
+            _lblRvRating.Text = r.Rating > 0 ? $"{r.Rating:0.0} ★" : "";
+            _txtRvComment.Text = string.IsNullOrWhiteSpace(r.Comment) ? "(Yorum metni yok)" : r.Comment.Trim();
+            _lblRvIndex.Text = $"{_rvIndex + 1} / {_currentReviews.Count}";
+            _btnRvPrev.Enabled = _rvIndex > 0;
+            _btnRvNext.Enabled = _rvIndex < _currentReviews.Count - 1;
+            _lblRvState.Visible = false;
         }
 
         /// <summary>
-        /// Tarayıcıyı barındıran ayrı (top-level) pencereyi kurar. Aynı WebView2 kontrolü
+        /// Tarayıcıyı barındıran ayrı (top-level) pencereyi kurar. Aynı CefSharp tarayıcı kontrolü
         /// buraya yerleştirilir; otomasyon yine aynı tarayıcıyı sürdürür. Pencere kapatılırsa
         /// (uygulama kapanmıyorsa) yok edilmez, yalnızca gizlenir.
         /// </summary>
@@ -565,7 +794,7 @@ namespace Yolcu360.PresentationLayer
                 MinimumSize = new Size(420, 520),
                 BackColor = ThemeColors.SidebarDark,
                 ShowInTaskbar = true,
-                // Tam ekran açılır; viewport CDP ile sabit (820px tablet) olduğundan pencere boyutu
+                // Tam ekran açılır; viewport CDP ile sabit (1000px tablet) olduğundan pencere boyutu
                 // ne olursa olsun site DOM'u değişmez, selector'lar bozulmaz.
                 WindowState = FormWindowState.Maximized,
                 Icon = Icon
@@ -987,11 +1216,21 @@ namespace Yolcu360.PresentationLayer
             try
             {
                 Cursor = Cursors.WaitCursor;
+                // HER İKİ tarayıcının da Yolcu360 oturumunu temizle: CefSharp (otomasyon) + WebView2
+                // (login). Aksi halde WebView2 girişli kalıp "Giriş Yap"ta otomatik köprülüyor.
                 await _services.BrowserService.ClearSiteSessionAsync();
+                try
+                {
+                    if (!_services.LoginBrowserService.IsInitialized)
+                        await _services.LoginBrowserService.InitializeAsync(Yolcu360Constants.LoginUrl);
+                    await _services.LoginBrowserService.ClearSiteSessionAsync();
+                }
+                catch (Exception lex) { LogHelper.Warning("WebView2 login oturumu temizlenemedi: " + lex.Message); }
+
                 await _services.BrowserService.LoadUrlAsync(Yolcu360Constants.LoginUrl);
                 _lblLoginStatus.Text = "• Giris: yapilmadi";
                 _lblLoginStatus.ForeColor = ThemeColors.SidebarText;
-                SetStatus("Cikis yapildi (oturum temizlendi).");
+                SetStatus("Cikis yapildi (her iki tarayici oturumu temizlendi).");
             }
             catch (Exception ex)
             {
@@ -1114,6 +1353,63 @@ namespace Yolcu360.PresentationLayer
             if (_dgv.CurrentRow?.DataBoundItem is not ResultCarDto car) return;
             _lblCarTitle.Text = string.IsNullOrWhiteSpace(car.CarModel) ? "-" : $"{car.CarModel}\n{car.RentalCompany}\n{car.Price:N0} {car.Currency}";
             _ = LoadCarImageAsync(car.ImageUrl);
+            _ = LoadReviewsForSelectedAsync(car);
+        }
+
+        /// <summary>
+        /// Seçili aracın firmasına ait değerlendirmeleri yükler. Aynı firma daha önce çekildiyse
+        /// runtime cache'ten gösterilir (siteye tekrar gidilmez). Kullanıcı hızlı satır değiştirirse
+        /// önceki yükleme iptal edilir (CancellationToken). UI donmaz: async/await, Thread.Sleep yok.
+        ///
+        /// PHASE 1 (şu an): UI'ı doğrulamak için örnek/dummy veri üretilir.
+        /// PHASE 2: bu metodun gövdesi CefSharp ile gerçek site DOM'undan okuyacak şekilde değişecek;
+        /// panel/cache/iptal akışı aynı kalır.
+        /// </summary>
+        private async Task LoadReviewsForSelectedAsync(ResultCarDto car)
+        {
+            _reviewCts?.Cancel();
+            _reviewCts = new CancellationTokenSource();
+            var ct = _reviewCts.Token;
+
+            if (car == null || string.IsNullOrWhiteSpace(car.RentalCompany))
+            {
+                ShowReviewState("Bu arac icin firma bilgisi yok.");
+                return;
+            }
+
+            var key = car.RentalCompany.Trim();
+            if (_supplierReviewCache.TryGetValue(key, out var cached))
+            {
+                LogHelper.Info($"Degerlendirme cache'ten gosterildi: {key}");
+                RenderReviewSummary(cached);
+                return;
+            }
+
+            ShowReviewLoading();
+            try
+            {
+                // Gerçek site DOM'undan oku (CefSharp): kartı bul → modal aç → puan+yorum oku → kapat.
+                var summary = await _services.ReviewService.GetSupplierReviewsAsync(car, 30, ct);
+                if (ct.IsCancellationRequested) return;
+
+                if (summary == null)
+                {
+                    ShowReviewState("Degerlendirme bilgisi bulunamadi.");
+                    return;
+                }
+
+                // Çekilemeyen (boş) sonuçları cache'leme; firma tekrar seçilince yeniden denensin.
+                if (summary.Reviews.Count > 0 || summary.OverallRating > 0)
+                    _supplierReviewCache[key] = summary;
+
+                RenderReviewSummary(summary);
+            }
+            catch (OperationCanceledException) { /* kullanıcı hızlı geçti: sessizce iptal */ }
+            catch (Exception ex)
+            {
+                LogHelper.Error("Firma degerlendirmesi yuklenemedi.", ex);
+                ShowReviewState("Degerlendirme bilgisi bulunamadi.");
+            }
         }
 
         private async Task LoadCarImageAsync(string url)

@@ -6,6 +6,7 @@ using Yolcu360.BusinessLayer.Abstract;
 using Yolcu360.BusinessLayer.Helpers;
 using Yolcu360.Common.Helpers;
 using Yolcu360.Common.Logging;
+using Yolcu360.DtoLayer.BrowserDto;
 
 namespace Yolcu360.BusinessLayer.Concrete
 {
@@ -47,6 +48,12 @@ namespace Yolcu360.BusinessLayer.Concrete
             _browser.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
             _browser.CoreWebView2.Settings.AreDevToolsEnabled = true;
             _browser.CoreWebView2.Settings.IsScriptEnabled = true;
+
+            // POPUP/YENİ PENCERE ENGELİ: site (ör. /login açılırken ana sayfayı) bir window.open ile
+            // açmaya çalışırsa ayrı pencere AÇILMASIN ve mevcut login sayfasını DEĞİŞTİRMESİN —
+            // sadece engellenir. (Aynı pencereye yönlendirmek login sayfasını ana sayfaya taşıyordu.)
+            _browser.CoreWebView2.NewWindowRequested += (s, e) => { e.Handled = true; };
+
             // Navigasyon durumunu izle: WaitForPageLoadAsync, aktif yukleme yoksa hemen donebilsin
             // (aksi halde zaten yuklu sayfada bir sonraki NavigationCompleted'i beklerken sonsuza takilir).
             _browser.CoreWebView2.NavigationStarting += (s, e) => _isNavigating = true;
@@ -273,6 +280,52 @@ namespace Yolcu360.BusinessLayer.Concrete
             {
                 LogHelper.Warning("Yumuşak çıkış tamamlanamadı: " + ex.Message);
             }
+        }
+
+        public async Task<List<BrowserCookieDto>> ExportCookiesAsync(string url, CancellationToken ct = default)
+        {
+            EnsureInitialized();
+            var result = new List<BrowserCookieDto>();
+            try
+            {
+                var cookies = await _browser.CoreWebView2.CookieManager.GetCookiesAsync(url);
+                foreach (var c in cookies)
+                {
+                    result.Add(new BrowserCookieDto
+                    {
+                        Name = c.Name,
+                        Value = c.Value,
+                        Domain = c.Domain,
+                        Path = c.Path,
+                        Secure = c.IsSecure,
+                        HttpOnly = c.IsHttpOnly,
+                        // CoreWebView2Cookie.Expires bir DateTime; oturum çerezinde IsSession=true.
+                        Expires = c.IsSession ? (DateTime?)null : c.Expires
+                    });
+                }
+            }
+            catch (Exception ex) { LogHelper.Warning("WebView2 çerez export hatası: " + ex.Message); }
+            return result;
+        }
+
+        public Task ImportCookiesAsync(string url, List<BrowserCookieDto> cookies, CancellationToken ct = default)
+        {
+            EnsureInitialized();
+            try
+            {
+                var cm = _browser.CoreWebView2.CookieManager;
+                foreach (var c in cookies ?? new List<BrowserCookieDto>())
+                {
+                    var wc = cm.CreateCookie(c.Name, c.Value, c.Domain, c.Path);
+                    wc.IsSecure = c.Secure;
+                    wc.IsHttpOnly = c.HttpOnly;
+                    if (c.Expires.HasValue)
+                        wc.Expires = c.Expires.Value;
+                    cm.AddOrUpdateCookie(wc);
+                }
+            }
+            catch (Exception ex) { LogHelper.Warning("WebView2 çerez import hatası: " + ex.Message); }
+            return Task.CompletedTask;
         }
 
         public void SetBrowserVisible(bool visible)
