@@ -976,17 +976,18 @@ namespace Yolcu360.PresentationLayer
         }
 
         /// <summary>
-        /// Site oturumunu kapatır: çerezleri + localStorage/sessionStorage'ı temizler ve giriş
-        /// sayfasını yeniden yükler. (Logout)
+        /// Site oturumunu kapatır (YUMUŞAK ÇIKIŞ): yalnızca Yolcu360 çerezleri + localStorage/
+        /// sessionStorage silinir, Google/reCAPTCHA güven çerezleri KORUNUR. Böylece tekrar girişte
+        /// reCAPTCHA "şüpheli yeni tarayıcı" deyip engellemez.
         /// </summary>
         private async void OnLogoutClick(object sender, EventArgs e)
         {
-            if (!UiHelper.Confirm("Site oturumu kapatılsın mı?\nÇerezler ve local storage silinecek (logout).", "Çıkış Yap"))
+            if (!UiHelper.Confirm("Site oturumu kapatılsın mı? (logout)\nYolcu360 çerezleri silinir; reCAPTCHA güveni korunur.", "Çıkış Yap"))
                 return;
             try
             {
                 Cursor = Cursors.WaitCursor;
-                await _services.BrowserService.ClearSessionAsync();
+                await _services.BrowserService.ClearSiteSessionAsync();
                 await _services.BrowserService.LoadUrlAsync(Yolcu360Constants.LoginUrl);
                 _lblLoginStatus.Text = "• Giris: yapilmadi";
                 _lblLoginStatus.ForeColor = ThemeColors.SidebarText;

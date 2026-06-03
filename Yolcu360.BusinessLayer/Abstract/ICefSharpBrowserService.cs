@@ -56,5 +56,13 @@ namespace Yolcu360.BusinessLayer.Abstract
         /// </summary>
         /// <returns>Başarıyla yazılan çerez sayısı.</returns>
         Task ClearSessionAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// YUMUŞAK ÇIKIŞ (logout): yalnızca Yolcu360 alan adının oturum çerezlerini ve
+        /// localStorage/sessionStorage'ını siler; Google/reCAPTCHA güven çerezlerini (ör. _GRECAPTCHA)
+        /// KORUR. Böylece çıkıştan hemen sonra tekrar girişte reCAPTCHA "şüpheli yeni tarayıcı"
+        /// muamelesi yapıp düşük puan vermez (recaptcha_score_too_low azalır).
+        /// </summary>
+        Task ClearSiteSessionAsync(CancellationToken ct = default);
     }
 }

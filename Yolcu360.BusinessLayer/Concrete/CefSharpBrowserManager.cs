@@ -247,6 +247,31 @@ namespace Yolcu360.BusinessLayer.Concrete
             }
         }
 
+        public async Task ClearSiteSessionAsync(CancellationToken ct = default)
+        {
+            // YUMUŞAK ÇIKIŞ: yalnızca Yolcu360 alan adı çerezleri + storage temizlenir;
+            // Google/reCAPTCHA çerezlerine (null alan = tümü) DOKUNULMAZ.
+            EnsureInitialized();
+            try
+            {
+                await SafeEvaluateAsync(@"(function(){
+                    try { localStorage.clear(); } catch(e) {}
+                    try { sessionStorage.clear(); } catch(e) {}
+                    return true;
+                })();", ct);
+
+                var manager = Cef.GetGlobalCookieManager();
+                await manager.DeleteCookiesAsync("https://www.yolcu360.com", null);
+                await manager.DeleteCookiesAsync("https://yolcu360.com", null);
+                await manager.FlushStoreAsync();
+                LogHelper.Info("Yolcu360 oturumu temizlendi (yumuşak çıkış, reCAPTCHA güveni korundu).");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Warning("CEF yumuşak çıkış tamamlanamadı: " + ex.Message);
+            }
+        }
+
         public void SetBrowserVisible(bool visible)
         {
             _visible = visible;

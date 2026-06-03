@@ -238,6 +238,43 @@ namespace Yolcu360.BusinessLayer.Concrete
             }
         }
 
+        public async Task ClearSiteSessionAsync(CancellationToken ct = default)
+        {
+            EnsureInitialized();
+            try
+            {
+                // Yalnızca Yolcu360 alan adına ait çerezleri sil; reCAPTCHA/Google güven çerezleri
+                // (farklı alan adında: google.com/gstatic.com) bu sorguya dahil OLMAZ → korunur.
+                var cm = _browser.CoreWebView2.CookieManager;
+                var cookies = await cm.GetCookiesAsync("https://www.yolcu360.com");
+                int removed = 0;
+                foreach (var c in cookies)
+                {
+                    var name = c.Name ?? string.Empty;
+                    // Garanti: yolcu360 alanında bir reCAPTCHA çerezi varsa onu da koru.
+                    if (name.StartsWith("_GRECAPTCHA", StringComparison.OrdinalIgnoreCase) ||
+                        name.StartsWith("rc::", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    cm.DeleteCookie(c);
+                    removed++;
+                }
+
+                // Yolcu360 sayfasının localStorage/sessionStorage'ı (oturum/token burada olabilir).
+                // reCAPTCHA güveni çerezde tutulduğu için bu temizlik onu etkilemez.
+                await SafeExecuteScriptAsync(@"(function(){
+                    try { localStorage.clear(); } catch(e) {}
+                    try { sessionStorage.clear(); } catch(e) {}
+                    return true;
+                })();", ct);
+
+                LogHelper.Info($"Yolcu360 oturumu temizlendi (yumuşak çıkış): {removed} çerez silindi, reCAPTCHA güveni korundu.");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Warning("Yumuşak çıkış tamamlanamadı: " + ex.Message);
+            }
+        }
+
         public void SetBrowserVisible(bool visible)
         {
             _visible = visible;
