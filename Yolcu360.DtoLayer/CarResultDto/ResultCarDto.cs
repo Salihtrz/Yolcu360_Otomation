@@ -18,6 +18,11 @@ namespace Yolcu360.DtoLayer.CarResultDto
         public DateTime ReturnDateTime { get; set; }
         public string SourceUrl { get; set; }
         public string ImageUrl { get; set; }
+        /// <summary>
+        /// Firma logosunun tam URL'si (/supplier/&lt;uuid&gt;.png). Firma değerlendirme modalını
+        /// açarken doğru araç kartını DOM'da kesin eşleştirmek için kullanılır. DB'ye yazılmaz.
+        /// </summary>
+        public string SupplierLogoUrl { get; set; }
         public DateTime ScrapedAt { get; set; }
     }
 }

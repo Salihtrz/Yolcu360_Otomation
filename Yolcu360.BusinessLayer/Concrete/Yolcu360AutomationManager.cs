@@ -319,6 +319,8 @@ namespace Yolcu360.BusinessLayer.Concrete
                     CarModel = Clean(r.carModel),
                     // Kartta firma metni yok; logo UUID'sinden gerçek firma adına çevrilir.
                     RentalCompany = Yolcu360Suppliers.ResolveName(r.rentalCompany),
+                    // Ham logo URL'si firma değerlendirme modalını açarken kart eşleştirmede kullanılır.
+                    SupplierLogoUrl = r.rentalCompany,
                     TransmissionType = Clean(r.transmission),
                     FuelType = Clean(r.fuel),
                     Segment = Clean(r.segment),

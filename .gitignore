@@ -37,9 +37,8 @@
 packages/
 .nuget/
 
-# CefSharp / WebView2 cache ve runtime
+# CefSharp cache ve runtime
 CefCache/
-WebView2Profile/
 
 # Test sonuclari
 [Tt]est[Rr]esult*/

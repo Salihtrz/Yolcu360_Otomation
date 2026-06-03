@@ -17,7 +17,11 @@ namespace Yolcu360.BusinessLayer
         public ICarResultService CarResultService { get; }
         public IUserService UserService { get; }
         public ICefSharpBrowserService BrowserService { get; }
+        /// <summary>Yalnızca GİRİŞ (login) için ayrı WebView2 tarayıcısı (reCAPTCHA gerçek Edge'de geçer).</summary>
+        public ICefSharpBrowserService LoginBrowserService { get; }
         public IYolcu360AutomationService AutomationService { get; }
+        /// <summary>Seçili aracın firmasının site üzerindeki değerlendirmelerini OKUR (salt-okunur).</summary>
+        public ISupplierReviewService ReviewService { get; }
         public IPngReportService PngReportService { get; }
         public ICsvReportService CsvReportService { get; }
         public IExcelReportService ExcelReportService { get; }
@@ -45,16 +49,24 @@ namespace Yolcu360.BusinessLayer
             ReportService = new ReportManager(reportRepository, carResultRepository, CarResultService);
             UserService = new UserManager(userRepository);
 
-            BrowserService = new WebView2BrowserManager();
+            // Aktif tarayıcı motoru: CefSharp (Chromium). Viewport kilidi + CDP gerçek tıklama
+            // DevTools (CEF UI thread'ine marshal edilerek) ile karşılanır (bkz. CefSharpBrowserManager).
+            BrowserService = new CefSharpBrowserManager();
             AutomationService = new Yolcu360AutomationManager(BrowserService);
+            // Firma değerlendirme okuma: otomasyon tarayıcısının (CefSharp) o anki sonuç sayfasını kullanır.
+            ReviewService = new SupplierReviewManager(BrowserService);
             PngReportService = new PngReportManager();
             CsvReportService = new CsvReportManager();
             ExcelReportService = new ExcelReportManager();
             SearchProfileService = new SearchProfileManager(searchProfileRepository);
 
             // Telefon + SMS/OTP giriş akışı (yalnızca kullanıcının kendi hesabı içindir).
+            // GİRİŞ AYRI bir WebView2 tarayıcısında yapılır: gerçek Edge runtime reCAPTCHA'yı geçer
+            // (CefSharp gömülü olduğu için düşük puan alıp engelleniyordu). Giriş başarılı olunca
+            // oturum çerezleri CefSharp otomasyon tarayıcısına köprülenir (OtpLoginForm).
             OtpReceiverService = new OtpReceiverManager();
-            LoginAutomationService = new LoginAutomationManager(BrowserService);
+            LoginBrowserService = new WebView2BrowserManager();
+            LoginAutomationService = new LoginAutomationManager(LoginBrowserService);
 
             // Araç kiralama SİMÜLASYONU (gerçek rezervasyon/ödeme yok).
             SimulatedRentalService = new SimulatedRentalManager(simulatedRentalRepository);
