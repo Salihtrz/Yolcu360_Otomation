@@ -81,5 +81,47 @@ namespace Yolcu360.BusinessLayer.Concrete
             var id = await _userRepository.InsertAsync(created, ct);
             LogHelper.Info($"Telefon numarası için yerel kullanıcı oluşturuldu (Id={id}).");
         }
+
+        public async Task<List<string>> GetAllPhoneNumbersAsync(CancellationToken ct = default)
+        {
+            var users = await _userRepository.GetAllAsync(ct);
+            return users
+                .Select(u => (u.PhoneNumber ?? string.Empty).Trim())
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(p => p, StringComparer.Ordinal)
+                .ToList();
+        }
+
+        public async Task AddPhoneNumberAsync(string phoneNumber, CancellationToken ct = default)
+        {
+            phoneNumber = (phoneNumber ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(phoneNumber))
+                return;
+
+            var users = await _userRepository.GetAllAsync(ct);
+            if (users.Any(u => string.Equals((u.PhoneNumber ?? string.Empty).Trim(), phoneNumber, StringComparison.Ordinal)))
+                return; // zaten kayıtlı
+
+            // Telefonu boş olan bir kullanıcı varsa onu kullan; yoksa numara için minimal kullanıcı ekle.
+            var emptyUser = users.FirstOrDefault(u => string.IsNullOrWhiteSpace(u.PhoneNumber));
+            if (emptyUser != null)
+            {
+                emptyUser.PhoneNumber = phoneNumber;
+                await _userRepository.UpdateAsync(emptyUser, ct);
+            }
+            else
+            {
+                var created = new User
+                {
+                    Email = $"phone-{DateTime.Now:yyyyMMddHHmmssfff}@yolcu360.app",
+                    Password = string.Empty,
+                    PhoneNumber = phoneNumber,
+                    CreatedAt = DateTime.Now
+                };
+                await _userRepository.InsertAsync(created, ct);
+            }
+            LogHelper.Info("Yeni giriş numarası kaydedildi.");
+        }
     }
 }

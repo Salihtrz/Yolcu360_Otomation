@@ -25,5 +25,14 @@ namespace Yolcu360.BusinessLayer.Abstract
         /// minimal bir yerel kullanıcı oluşturur. Mevcut alanları bozmaz.
         /// </summary>
         Task SavePhoneNumberAsync(string phoneNumber, CancellationToken ct = default);
+
+        /// <summary>DB'de kayıtlı tüm (boş olmayan, tekilleştirilmiş) telefon numaralarını döner.</summary>
+        Task<List<string>> GetAllPhoneNumbersAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// Yeni bir giriş numarasını kaydeder (zaten varsa dokunmaz). Böylece dropdown'da
+        /// birden fazla numara seçilebilir hale gelir.
+        /// </summary>
+        Task AddPhoneNumberAsync(string phoneNumber, CancellationToken ct = default);
     }
 }

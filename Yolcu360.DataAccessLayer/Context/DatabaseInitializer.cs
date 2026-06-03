@@ -134,6 +134,44 @@ CREATE TABLE IF NOT EXISTS CarResults (
     CONSTRAINT FK_CarResults_Reports FOREIGN KEY (ReportId)
         REFERENCES Reports(Id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS SimulatedRentals (
+    Id INT PRIMARY KEY AUTO_INCREMENT,
+    CarResultId INT NULL,
+    CarModel VARCHAR(200) NULL,
+    RentalCompany VARCHAR(200) NULL,
+    TransmissionType VARCHAR(100) NULL,
+    FuelType VARCHAR(100) NULL,
+    Segment VARCHAR(100) NULL,
+    PickupLocation VARCHAR(200) NULL,
+    PickupDateTime DATETIME NULL,
+    ReturnDateTime DATETIME NULL,
+    RentalDays INT NOT NULL DEFAULT 1,
+    BasePrice DECIMAL(18,2) NOT NULL DEFAULT 0,
+    ExtraServicesTotal DECIMAL(18,2) NOT NULL DEFAULT 0,
+    GrandTotal DECIMAL(18,2) NOT NULL DEFAULT 0,
+    PaymentMethod VARCHAR(100) NULL,
+    DriverFirstName VARCHAR(100) NULL,
+    DriverLastName VARCHAR(100) NULL,
+    DriverPhone VARCHAR(40) NULL,
+    DriverEmail VARCHAR(150) NULL,
+    DriverIdentityNo VARCHAR(50) NULL,
+    DriverBirthDate DATETIME NULL,
+    DriverLicenseNo VARCHAR(50) NULL,
+    DriverLicenseDate DATETIME NULL,
+    SimulationStatus VARCHAR(50) NULL,
+    SimulationCode VARCHAR(60) NULL,
+    CreatedAt DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS SimulatedRentalExtras (
+    Id INT PRIMARY KEY AUTO_INCREMENT,
+    SimulatedRentalId INT NOT NULL,
+    ExtraName VARCHAR(120) NULL,
+    ExtraPrice DECIMAL(18,2) NOT NULL DEFAULT 0,
+    CONSTRAINT FK_SimExtras_SimRentals FOREIGN KEY (SimulatedRentalId)
+        REFERENCES SimulatedRentals(Id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ";
 
         /// <summary>

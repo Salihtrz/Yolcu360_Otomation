@@ -31,21 +31,17 @@ namespace Yolcu360.BusinessLayer.Concrete
         {
             void Report(string s) { progress?.Report(s); LogHelper.Info("Arama: " + s); }
 
+            // HER ARAMA TEMİZ FORMDAN BAŞLAR. Önceki aramadan sonra tarayıcı ya sonuç sayfasında
+            // (/arac-kiralama/search) ya da eski lokasyon/saat değerleri girili ana sayfada kalmış
+            // olabilir. Bu "bayat bağlam" yüzünden ikinci aramada site, yeni lokasyon/saat yerine
+            // önceki aramayı (ör. Yenibosna 10:00) koruyabiliyordu. Bunu kökten önlemek için ana
+            // sayfa HER SEFERINDE yeniden yüklenir; böylece form boş ve tutarlı olur.
             Report("Site hazır olması bekleniyor...");
+            await _browser.LoadUrlAsync(Yolcu360Constants.HomeUrl, ct);
             await _browser.WaitForPageLoadAsync(ct);
 
-            // Tekrar arama senaryosu: önceki aramadan sonra tarayıcı sonuç sayfasında
-            // (/arac-kiralama/search) kalmış olabilir; orada arama formu yoktur. Form bulunamazsa
-            // araç kiralama (ana) sayfasına dönülür ki yeni bir arama yapılabilsin.
-            var hasLocation = await _browser.WaitForElementAsync(Yolcu360Selectors.PickupLocationSelectors, 4, ct);
-            if (!hasLocation)
-            {
-                Report("Araç kiralama sayfasına dönülüyor...");
-                await _browser.LoadUrlAsync(Yolcu360Constants.HomeUrl, ct);
-                await _browser.WaitForPageLoadAsync(ct);
-                hasLocation = await _browser.WaitForElementAsync(
-                    Yolcu360Selectors.PickupLocationSelectors, Yolcu360Constants.DefaultWaitTimeoutSeconds, ct);
-            }
+            var hasLocation = await _browser.WaitForElementAsync(
+                Yolcu360Selectors.PickupLocationSelectors, Yolcu360Constants.DefaultWaitTimeoutSeconds, ct);
             if (!hasLocation)
                 throw new AutomationException("Arama alanı bulunamadı. Site yapısı değişmiş olabilir veya sayfa açılmamış olabilir.");
 
@@ -67,11 +63,21 @@ namespace Yolcu360.BusinessLayer.Concrete
                     LogHelper.Warning($"Lokasyon önerisi {attempt}. denemede açılmadı, tekrar denenecek.");
             }
 
-            // 2) Autocomplete önerisini seç (Yolcu360'da arama için zorunlu — koordinat/place id buradan gelir)
+            // 2) Autocomplete önerisini seç. ÖNEMLİ: ilk öneriyi değil, yazılan metne EN İYİ eşleşeni
+            //    tıkla (ör. "İstanbul - Yenibosna" yazınca ilk öneri "İstanbul Havalimanı" olabiliyordu).
             if (suggestionsOpened)
             {
                 Report("Lokasyon önerisi seçiliyor...");
-                await _browser.ClickElementAsync(Yolcu360Selectors.LocationSuggestionSelectors, ct);
+                await _browser.EvaluateBoolAsync(
+                    JsHelper.BuildClickBestLocationSuggestionScript(
+                        Yolcu360Selectors.LocationSuggestionSelectors, request.PickupLocation), ct);
+
+                // DOĞRULAMA: seçim sonrası input'a yerleşen değeri oku ve logla. Beklenen ile
+                // sitedeki gerçek lokasyon eşleşmiyorsa burada görünür (kör kalmayalım).
+                await Task.Delay(700, ct);
+                var committedLoc = await _browser.EvaluateStringAsync(
+                    JsHelper.BuildGetInputValueScript(Yolcu360Selectors.PickupLocationSelectors), ct);
+                LogHelper.Info($"Lokasyon seçildi → istenen: '{request.PickupLocation}' | sitedeki input: '{committedLoc}'");
             }
             else
             {
@@ -100,8 +106,8 @@ namespace Yolcu360.BusinessLayer.Concrete
             //     Tetikleyiciye tıklanır, ardından hedef saate (yarım saate yuvarlanmış) tıklanır.
             //     Best-effort: başarısız olursa site varsayılanı (10:00) ile devam edilir.
             await Task.Delay(1000, ct); // takvim panelinin oturması için
-            await SetSiteTimeAsync("Alış Saati", request.PickupTime, ct);
-            await SetSiteTimeAsync("Dönüş Saati", request.ReturnTime, ct);
+            await SetSiteTimeAsync("Alış Saati", 0, request.PickupTime, ct);
+            await SetSiteTimeAsync("Dönüş Saati", 1, request.ReturnTime, ct);
 
             // 5) Aramayı tetikle
             Report("Arama yapılıyor...");
@@ -112,17 +118,28 @@ namespace Yolcu360.BusinessLayer.Concrete
             // Arama yeni sayfaya/AJAX'a yol açar.
             await _browser.WaitForPageLoadAsync(ct);
 
+            // Site bazen bir bilgi/uyarı modalı (ör. saat dilimi uyarısı, çerez bildirimi) gösterir
+            // ve bu, sonuçların yüklenmesini/görünmesini engelleyebilir. Best-effort kapatılır.
+            await Task.Delay(800, ct);
+            await _browser.EvaluateBoolAsync(JsHelper.BuildDismissModalScript(), ct);
+
             Report("Sonuçlar bekleniyor...");
             var hasResults = await _browser.WaitForResultsAsync(
                 Yolcu360Selectors.ResultCardSelectors, Yolcu360Constants.ResultsWaitTimeoutSeconds, ct);
             if (!hasResults)
-                throw new AutomationException("Sonuç bulunamadı veya site yapısı değişmiş olabilir.");
-
-            // Liste lazy-load ile yüklenir (ilk ~20 kart). Daha fazlasını getirmek için
-            // sayfa birkaç kez aşağı kaydırılır (Thread.Sleep değil, async bekleme).
-            await ScrollToLoadMoreAsync(ct);
+            {
+                // Modal yeniden denenir (geç açılmış olabilir), sonra kısa bir kez daha beklenir.
+                await _browser.EvaluateBoolAsync(JsHelper.BuildDismissModalScript(), ct);
+                hasResults = await _browser.WaitForResultsAsync(
+                    Yolcu360Selectors.ResultCardSelectors, 8, ct);
+            }
+            if (!hasResults)
+                throw new AutomationException(
+                    "Sonuç bulunamadı. Seçtiğiniz tarih/saat geçmiş olabilir veya o lokasyon-zaman için araç yok. " +
+                    "Lütfen ileri bir tarih/saat seçip tekrar deneyin.");
 
             Report("Araç bilgileri çekiliyor...");
+            // Not: ScrapeCurrentResultsAsync, kazımadan önce tüm sonuçları (lazy-load) yükler.
             var cars = await ScrapeCurrentResultsAsync(request, ct);
 
             Report($"İşlem tamamlandı. {cars.Count} araç bulundu.");
@@ -130,45 +147,110 @@ namespace Yolcu360.BusinessLayer.Concrete
         }
 
         /// <summary>
-        /// Site saat seçicisinden (li.hour-li) hedef saati seçer. Saat yarım saate yuvarlanır.
-        /// Best-effort: tetikleyici/seçenek bulunamazsa sessizce geçilir (varsayılan saat kalır).
+        /// Site saat seçicisinden hedef saati seçer (yarım saate yuvarlanır). GERÇEK DOM (2026):
+        /// sayfada 2 tetikleyici DIV (index 0 = Alış, 1 = Dönüş, metni "HH:MM", cursor:pointer);
+        /// tıklayınca açılan menü body'ye taşınır ve seçenekler &lt;li&gt;HH:MM&lt;/li&gt; (48 adet).
+        ///
+        /// ÖNEMLİ: Menü YALNIZCA gerçek (CDP/trusted) tıklama ile açılır; JS .click() açmaz. Bu yüzden
+        /// tetikleyici index ile bulunup CDP ile tıklanır, açılan menüde hedef li görünür alana
+        /// kaydırılıp yine CDP ile tıklanır; her adımda GÖSTERİLEN değer okunup hedefle doğrulanır.
         /// </summary>
-        private async Task SetSiteTimeAsync(string label, TimeSpan time, CancellationToken ct)
+        private async Task SetSiteTimeAsync(string label, int index, TimeSpan time, CancellationToken ct)
         {
             var target = RoundToHalfHour(time);
-            var listOpenScript = "(function(){ return document.querySelectorAll('li.hour-li').length > 0; })();";
 
-            // Tetikleyiciye tıkla ve saat listesinin gerçekten açıldığını doğrula; açılmazsa
-            // (Vue widget'ı bazen ilk tıkta tepki vermiyor) birkaç kez yeniden dene.
-            var listOpened = false;
-            for (int attempt = 1; attempt <= 2 && !listOpened; attempt++)
+            // Zaten doğru değer gösteriliyorsa dokunma.
+            if (await GetDisplayedTimeAsync(index, ct) == target)
             {
-                var triggerOk = await _browser.EvaluateBoolAsync(JsHelper.BuildClickTimeTriggerScript(label), ct);
-                if (!triggerOk)
-                {
-                    LogHelper.Warning($"Saat tetikleyicisi bulunamadı ('{label}'), varsayılan saat kullanılacak.");
-                    return;
-                }
-                await Task.Delay(1000, ct);
-                listOpened = await _browser.EvaluateBoolAsync(listOpenScript, ct);
-            }
-
-            if (!listOpened)
-            {
-                LogHelper.Warning($"Saat listesi açılmadı ('{label}'), varsayılan saat kalacak.");
+                LogHelper.Info($"Saat zaten doğru ('{label}' = {target}).");
                 return;
             }
 
-            var optionOk = await _browser.EvaluateBoolAsync(JsHelper.BuildClickTimeOptionScript(target), ct);
-            LogHelper.Info(optionOk
-                ? $"Saat seçildi ('{label}' = {target})."
-                : $"Saat seçeneği bulunamadı ('{label}' = {target}), varsayılan saat kalacak.");
+            // SABIRLI EŞLEŞTİRME: birkaç tur. Her turda menüyü (CDP) aç; hedef li'yi görünür yapıp
+            // önce JS .click() sonra CDP gerçek tıklama ile seç; her denemede gösterilen değeri doğrula.
+            var ok = false;
+            for (int outer = 1; outer <= 4 && !ok; outer++)
+            {
+                if (!await OpenHourListAsync(index, ct))
+                {
+                    LogHelper.Warning($"Saat menüsü açılamadı ('{label}'), tur {outer}.");
+                    continue;
+                }
 
-            // Açık kalan liste sonraki adımı engellemesin diye nötr bir tıklama ile kapat.
-            if (!optionOk)
-                await _browser.EvaluateBoolAsync("(function(){ document.body.click(); return true; })();", ct);
+                for (int step = 1; step <= 6 && !ok; step++)
+                {
+                    // (a) Menü açıkken li.click() (untrusted) çoğu zaman yeterli.
+                    await _browser.EvaluateBoolAsync(JsHelper.BuildClickHourOptionJsScript(target), ct);
+                    await Task.Delay(300, ct);
+                    if (await GetDisplayedTimeAsync(index, ct) == target) { ok = true; break; }
 
-            await Task.Delay(400, ct);
+                    // (b) CDP gerçek tıklama (li görünür alana kaydırılıp koordinatından).
+                    if (!await IsHourListOpenAsync(ct))
+                        if (!await OpenHourListAsync(index, ct)) break;
+                    var rect = ParsePoint(await _browser.EvaluateStringAsync(JsHelper.BuildGetHourOptionRectScript(target), ct));
+                    if (rect != null)
+                    {
+                        await _browser.RealClickAtAsync(rect.X, rect.Y, ct);
+                        await Task.Delay(350, ct);
+                        if (await GetDisplayedTimeAsync(index, ct) == target) { ok = true; break; }
+                    }
+                    else
+                    {
+                        // Hedef henüz render edilmemişse menüyü aşağı kaydır.
+                        await _browser.EvaluateBoolAsync(JsHelper.BuildScrollHourListScript(), ct);
+                        await Task.Delay(200, ct);
+                    }
+                }
+            }
+
+            if (ok)
+                LogHelper.Info($"Saat eşleştirildi ('{label}' = {target}).");
+            else
+                LogHelper.Warning($"Saat EŞLEŞTİRİLEMEDİ ('{label}' = {target}). Varsayılan saat kalmış olabilir.");
+
+            // Açık kalan menüyü kapat (Escape benzeri: nötr bir noktaya gerçek tıklama).
+            if (await IsHourListOpenAsync(ct))
+            {
+                await _browser.RealClickAtAsync(5, 5, ct);
+                await Task.Delay(250, ct);
+            }
+        }
+
+        /// <summary>index. tetikleyicinin o an gösterdiği değeri (HH:MM) okur; doğrulama için.</summary>
+        private async Task<string> GetDisplayedTimeAsync(int index, CancellationToken ct)
+            => (await _browser.EvaluateStringAsync(JsHelper.BuildGetDisplayedTimeByIndexScript(index), ct))?.Trim() ?? "";
+
+        /// <summary>Saat menüsü (metni HH:MM olan ≥10 li) açık mı?</summary>
+        private async Task<bool> IsHourListOpenAsync(CancellationToken ct)
+            => await _browser.EvaluateBoolAsync(JsHelper.BuildIsTimeMenuOpenScript(), ct);
+
+        /// <summary>index. saat tetikleyicisine GERÇEK (CDP) tıklayarak menüyü açar; birkaç kez dener.</summary>
+        private async Task<bool> OpenHourListAsync(int index, CancellationToken ct)
+        {
+            var pt = ParsePoint(await _browser.EvaluateStringAsync(JsHelper.BuildGetTimeTriggerRectByIndexScript(index), ct));
+            if (pt == null) return false;
+            for (int i = 1; i <= 3; i++)
+            {
+                await _browser.RealClickAtAsync(pt.X, pt.Y, ct);
+                await Task.Delay(600, ct);
+                if (await IsHourListOpenAsync(ct)) return true;
+                pt = ParsePoint(await _browser.EvaluateStringAsync(JsHelper.BuildGetTimeTriggerRectByIndexScript(index), ct)) ?? pt;
+            }
+            return false;
+        }
+
+        /// <summary>"{x,y}" JSON'unu (BuildGet*RectScript çıktısı) noktaya çevirir; boş/geçersizse null.</summary>
+        private static RectPoint ParsePoint(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return null;
+            try { return JsonConvert.DeserializeObject<RectPoint>(json); }
+            catch { return null; }
+        }
+
+        private sealed class RectPoint
+        {
+            public double X { get; set; }
+            public double Y { get; set; }
         }
 
         /// <summary>Saati en yakın yarım saate yuvarlayıp "HH:mm" döndürür (site listesi 30 dk aralıklı).</summary>
@@ -180,21 +262,39 @@ namespace Yolcu360.BusinessLayer.Concrete
             return $"{rounded.Hours:D2}:{rounded.Minutes:D2}";
         }
 
-        /// <summary>Lazy-load ile daha fazla sonuç yüklemek için sayfayı birkaç kez aşağı kaydırır.</summary>
-        private async Task ScrollToLoadMoreAsync(CancellationToken ct, int times = 4)
+        /// <summary>
+        /// Lazy-load ile TÜM sonuçları yükler: kart sayısı artık ARTMAYANA kadar (üst üste 3 kez aynı)
+        /// sayfayı aşağı kaydırır. Böylece site 56 araç gösterirken uygulamada 20 kalması önlenir.
+        /// </summary>
+        private async Task ScrollToLoadMoreAsync(CancellationToken ct)
         {
-            for (int i = 0; i < times; i++)
+            int last = -1, stable = 0;
+            for (int i = 0; i < 40 && stable < 3; i++)
             {
                 await _browser.EvaluateBoolAsync(
                     "(function(){ window.scrollTo(0, document.body.scrollHeight); return true; })();", ct);
-                await Task.Delay(1200, ct);
+                await Task.Delay(900, ct);
+                var count = await GetResultCountAsync(ct);
+                if (count == last) stable++; else { stable = 0; last = count; }
             }
-            // Başa dön (scrape için fark etmez, sadece düzen).
             await _browser.EvaluateBoolAsync("(function(){ window.scrollTo(0,0); return true; })();", ct);
+            LogHelper.Info($"Lazy-load tamamlandı: {last} kart yüklendi.");
+        }
+
+        /// <summary>Sayfadaki mevcut sonuç kartı sayısını döndürür.</summary>
+        private async Task<int> GetResultCountAsync(CancellationToken ct)
+        {
+            var s = await _browser.EvaluateStringAsync(
+                JsHelper.BuildCountResultsScript(Yolcu360Selectors.ResultCardSelectors), ct);
+            return int.TryParse(s?.Trim(), out var n) ? n : 0;
         }
 
         public async Task<List<ResultCarDto>> ScrapeCurrentResultsAsync(SearchRequestDto request, CancellationToken ct = default)
         {
+            // Kazımadan ÖNCE tüm sonuçları yükle (lazy-load): hem ilk aramada hem filtre
+            // uygulandıktan sonra liste tamamlanmadan kazınmasın (site 56 → uygulama 20 sorunu).
+            await ScrollToLoadMoreAsync(ct);
+
             var script = JsHelper.BuildScrapeResultsScript(
                 Yolcu360Selectors.ResultCardSelectors,
                 Yolcu360Selectors.CarModelSelectors,
@@ -255,140 +355,66 @@ namespace Yolcu360.BusinessLayer.Concrete
             // farklıysa tıklanır. Böylece ikinci kez "Uygula" denince zaten seçili filtreler kapanmaz.
             if (filter == null) return false;
 
-            // İstenen vites/yakıt id kümeleri
-            var wantTrans = (filter.TransmissionTypes ?? new()).Select(MapTransmissionId).Where(x => x != null).ToHashSet();
-            var wantFuel = (filter.FuelTypes ?? new()).Select(MapFuelId).Where(x => x != null).ToHashSet();
-
-            // Vites (bilinen tüm id'ler için hedef durumu uygula → seçilmeyenler de kapanır)
+            // Vites (bilinen tüm id'ler için hedef durumu uygula → seçilmeyenler de kapanır).
+            // Id'ler UI'dan/siteden gelir; uygulamada ad→id sabit eşlemesi YOK.
+            var wantTrans = (filter.TransmissionIds ?? new()).ToHashSet();
             foreach (var id in new[] { "1", "2" })
                 await _browser.EvaluateBoolAsync(JsHelper.BuildSetCheckboxScript($"filter-transmission.{id}", wantTrans.Contains(id)), ct);
 
             // Yakıt
+            var wantFuel = (filter.FuelIds ?? new()).ToHashSet();
             foreach (var id in new[] { "1", "2", "5", "7", "8", "11" })
                 await _browser.EvaluateBoolAsync(JsHelper.BuildSetCheckboxScript($"filter-fuel.{id}", wantFuel.Contains(id)), ct);
 
-            // Firma (tek seçim): seçili olanı bırak, diğer tüm vendor kutularını kapat
-            var vendorKeep = new List<string>();
-            if (!string.IsNullOrWhiteSpace(filter.RentalCompany))
-                vendorKeep.Add($"filter-vendor.{filter.RentalCompany.Trim().ToLowerInvariant()}");
-            await _browser.EvaluateBoolAsync(JsHelper.BuildResetCheckboxGroupScript("filter-vendor.", vendorKeep.ToArray()), ct);
+            // Firma/Marka/Model (tek seçim, siteden dinamik gelen id son ekiyle): seçileni bırak,
+            // grubun diğer tüm kutularını kapat.
+            await _browser.EvaluateBoolAsync(JsHelper.BuildResetCheckboxGroupScript("filter-vendor.",
+                string.IsNullOrWhiteSpace(filter.VendorId) ? Array.Empty<string>() : new[] { $"filter-vendor.{filter.VendorId.Trim()}" }), ct);
+            await _browser.EvaluateBoolAsync(JsHelper.BuildResetCheckboxGroupScript("filter-brand.",
+                string.IsNullOrWhiteSpace(filter.BrandId) ? Array.Empty<string>() : new[] { $"filter-brand.{filter.BrandId.Trim()}" }), ct);
+            await _browser.EvaluateBoolAsync(JsHelper.BuildResetCheckboxGroupScript("filter-model.",
+                string.IsNullOrWhiteSpace(filter.ModelId) ? Array.Empty<string>() : new[] { $"filter-model.{filter.ModelId.Trim()}" }), ct);
 
-            // Marka (tek seçim): seçili olanı bırak, diğer marka kutularını kapat
-            var brandKeep = new List<string>();
-            var brandId = MapBrandId(filter.Brand);
-            if (brandId != null)
-                brandKeep.Add($"filter-brand.{brandId}");
-            await _browser.EvaluateBoolAsync(JsHelper.BuildResetCheckboxGroupScript("filter-brand.", brandKeep.ToArray()), ct);
+            // Koltuk Sayısı (checkbox grubu 'filter-seat.N'): tek seçim → grubu sıfırla, seçileni bırak.
+            var seatKeep = string.IsNullOrWhiteSpace(filter.SeatCount)
+                ? Array.Empty<string>() : new[] { $"filter-seat.{filter.SeatCount.Trim()}" };
+            await _browser.EvaluateBoolAsync(JsHelper.BuildResetCheckboxGroupScript("filter-seat.", seatKeep), ct);
+
+            // Araç Teslim Şekli (checkbox grubu 'filter-delivery_type.N').
+            var deliveryKeep = string.IsNullOrWhiteSpace(filter.DeliveryType)
+                ? Array.Empty<string>() : new[] { $"filter-delivery_type.{filter.DeliveryType.Trim()}" };
+            await _browser.EvaluateBoolAsync(JsHelper.BuildResetCheckboxGroupScript("filter-delivery_type.", deliveryKeep), ct);
+
+            // KM Sınırı ve Depozito: RADIO grupları (checkbox değil) → BuildSetRadioScript.
+            await _browser.EvaluateBoolAsync(JsHelper.BuildSetRadioScript("filter-distance_limit.",
+                string.IsNullOrWhiteSpace(filter.KmLimit) ? null : $"filter-distance_limit.{filter.KmLimit.Trim()}"), ct);
+            await _browser.EvaluateBoolAsync(JsHelper.BuildSetRadioScript("filter-provision.",
+                string.IsNullOrWhiteSpace(filter.Deposit) ? null : $"filter-provision.{filter.Deposit.Trim()}"), ct);
 
             // Site XHR ile listeyi güncellesin
             await Task.Delay(1500, ct);
             await _browser.WaitForResultsAsync(
                 Yolcu360Selectors.ResultCardSelectors, Yolcu360Constants.ResultsWaitTimeoutSeconds, ct);
 
-            var applied = filter.HasAnyFilter;
+            var applied = filter.HasSiteFilter;
             LogHelper.Info(applied ? "Site üzerinde filtreler ayarlandı." : "Site filtreleri temizlendi.");
             return applied;
         }
 
-        /// <summary>Marka adını Yolcu360'ın sayısal marka id'sine çevirir; bilinmiyorsa null.</summary>
-        private static string MapBrandId(string brand)
+        public async Task<List<SiteFilterSectionDto>> ScrapeSiteFiltersAsync(CancellationToken ct = default)
         {
-            if (string.IsNullOrWhiteSpace(brand)) return null;
-            return brand.Trim().ToLowerInvariant() switch
+            var json = await _browser.EvaluateStringAsync(JsHelper.BuildScrapeFiltersScript(), ct);
+            if (string.IsNullOrWhiteSpace(json))
+                return new List<SiteFilterSectionDto>();
+            try
             {
-                "alfa romeo" => "53",
-                "audi" => "58",
-                "bmw" => "59",
-                "byd" => "124",
-                "chery" => "108",
-                "citroen" or "citroën" => "61",
-                "cupra" => "94",
-                "dacia" => "62",
-                "ds" => "152",
-                "fiat" => "63",
-                "ford" => "64",
-                "hyundai" => "66",
-                "jeep" => "67",
-                "kia" => "68",
-                "mercedes" or "mercedes benz" or "mercedes-benz" => "54",
-                "mini" => "73",
-                "nissan" => "74",
-                "opel" => "75",
-                "peugeot" => "76",
-                "renault" => "78",
-                "seat" => "79",
-                "skoda" or "škoda" => "80",
-                "suzuki" => "82",
-                _ => null
-            };
-        }
-
-        private static string MapTransmissionId(string t)
-        {
-            t = t?.Trim().ToLowerInvariant();
-            return t switch
+                return JsonConvert.DeserializeObject<List<SiteFilterSectionDto>>(json) ?? new List<SiteFilterSectionDto>();
+            }
+            catch (Exception ex)
             {
-                "manuel" or "manual" => "1",
-                "otomatik" or "automatic" or "auto" => "2",
-                _ => null
-            };
-        }
-
-        private static string MapFuelId(string f)
-        {
-            f = f?.Trim().ToLowerInvariant();
-            return f switch
-            {
-                "benzin" => "1",
-                "dizel" or "diesel" => "2",
-                "lpg" => "5",
-                "hibrit" or "hybrid" => "7",
-                "elektrik" or "electric" => "11",
-                _ => null
-            };
-        }
-
-        public List<ResultCarDto> ApplyFiltersLocally(List<ResultCarDto> cars, FilterRequestDto filter)
-        {
-            if (cars == null) return new List<ResultCarDto>();
-            if (filter == null || !filter.HasAnyFilter) return cars;
-
-            IEnumerable<ResultCarDto> q = cars;
-
-            if (filter.TransmissionTypes?.Count > 0)
-                q = q.Where(c => filter.TransmissionTypes.Any(t =>
-                    !string.IsNullOrEmpty(c.TransmissionType) &&
-                    c.TransmissionType.Contains(t, StringComparison.OrdinalIgnoreCase)));
-
-            if (filter.FuelTypes?.Count > 0)
-                q = q.Where(c => filter.FuelTypes.Any(f =>
-                    !string.IsNullOrEmpty(c.FuelType) &&
-                    c.FuelType.Contains(f, StringComparison.OrdinalIgnoreCase)));
-
-            if (!string.IsNullOrWhiteSpace(filter.Segment))
-                q = q.Where(c => !string.IsNullOrEmpty(c.Segment) &&
-                    c.Segment.Contains(filter.Segment, StringComparison.OrdinalIgnoreCase));
-
-            // Firma (RentalCompany) artık logo UUID'sinden gerçek ada çevrildiği için yerel
-            // olarak da filtrelenebilir.
-            if (!string.IsNullOrWhiteSpace(filter.RentalCompany))
-                q = q.Where(c => !string.IsNullOrEmpty(c.RentalCompany) &&
-                    c.RentalCompany.Contains(filter.RentalCompany, StringComparison.OrdinalIgnoreCase));
-
-            // Marka: araç modeli marka adıyla başlar/içerir (ör. "Fiat Egea" -> Fiat).
-            if (!string.IsNullOrWhiteSpace(filter.Brand))
-                q = q.Where(c => !string.IsNullOrEmpty(c.CarModel) &&
-                    c.CarModel.Contains(filter.Brand, StringComparison.OrdinalIgnoreCase));
-
-            if (filter.MinPrice.HasValue)
-                q = q.Where(c => c.Price >= filter.MinPrice.Value);
-
-            if (filter.MaxPrice.HasValue)
-                q = q.Where(c => c.Price <= filter.MaxPrice.Value);
-
-            var result = q.ToList();
-            LogHelper.Info($"Yerel filtre uygulandı: {cars.Count} -> {result.Count} araç.");
-            return result;
+                LogHelper.Error("Filtre paneli okunamadı (JSON).", ex);
+                return new List<SiteFilterSectionDto>();
+            }
         }
 
         // ---- Yardımcı metotlar ----

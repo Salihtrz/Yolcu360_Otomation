@@ -24,6 +24,8 @@ namespace Yolcu360.BusinessLayer
         public ISearchProfileService SearchProfileService { get; }
         public IOtpReceiverService OtpReceiverService { get; }
         public ILoginAutomationService LoginAutomationService { get; }
+        public ISimulatedRentalService SimulatedRentalService { get; }
+        public ISimulationPngService SimulationPngService { get; }
         public DatabaseInitializer DatabaseInitializer { get; }
 
         public AppServices()
@@ -36,6 +38,7 @@ namespace Yolcu360.BusinessLayer
             ICarResultRepository carResultRepository = new CarResultRepository(connectionFactory);
             IUserRepository userRepository = new UserRepository(connectionFactory);
             ISearchProfileRepository searchProfileRepository = new SearchProfileRepository(connectionFactory);
+            ISimulatedRentalRepository simulatedRentalRepository = new SimulatedRentalRepository(connectionFactory);
 
             // Business
             CarResultService = new CarResultManager();
@@ -52,6 +55,10 @@ namespace Yolcu360.BusinessLayer
             // Telefon + SMS/OTP giriş akışı (yalnızca kullanıcının kendi hesabı içindir).
             OtpReceiverService = new OtpReceiverManager();
             LoginAutomationService = new LoginAutomationManager(BrowserService);
+
+            // Araç kiralama SİMÜLASYONU (gerçek rezervasyon/ödeme yok).
+            SimulatedRentalService = new SimulatedRentalManager(simulatedRentalRepository);
+            SimulationPngService = new SimulationPngManager();
         }
     }
 }

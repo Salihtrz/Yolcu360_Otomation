@@ -20,15 +20,18 @@ namespace Yolcu360.BusinessLayer.Abstract
             CancellationToken ct = default);
 
         /// <summary>
-        /// Filtreyi site üzerinde uygulamayı dener. Site filtre elemanları bulunamazsa
-        /// false döner (bu durumda çağıran yerel filtreye düşmelidir).
+        /// Seçili filtreleri YALNIZCA site üzerinde uygular (uygulama içi/local filtreleme yoktur).
+        /// Boş filtre, sitedeki tüm filtre kutularını/radyolarını temizler.
         /// </summary>
         Task<bool> ApplyFiltersOnWebsiteAsync(FilterRequestDto filter, CancellationToken ct = default);
 
-        /// <summary>Eldeki sonuç listesini C# tarafında filtreler (site filtresi yoksa).</summary>
-        List<ResultCarDto> ApplyFiltersLocally(List<ResultCarDto> cars, FilterRequestDto filter);
-
         /// <summary>Mevcut sonuç sayfasını yeniden kazır (site filtresi uygulandıktan sonra).</summary>
         Task<List<ResultCarDto>> ScrapeCurrentResultsAsync(SearchRequestDto request, CancellationToken ct = default);
+
+        /// <summary>
+        /// Sonuç sayfasındaki filtre panelini siteden dinamik okur (marka/şirket/model/... bölümleri
+        /// ve seçenekleri). UI dropdown'larını site verisiyle doldurmak için kullanılır.
+        /// </summary>
+        Task<List<SiteFilterSectionDto>> ScrapeSiteFiltersAsync(CancellationToken ct = default);
     }
 }

@@ -139,6 +139,24 @@ namespace Yolcu360.BusinessLayer.Concrete
             return ok;
         }
 
+        public Task<bool> RealClickAtAsync(double x, double y, CancellationToken ct = default)
+        {
+            EnsureInitialized();
+            try
+            {
+                var host = _browser.GetBrowserHost();
+                host.SendMouseMoveEvent((int)x, (int)y, false, CefEventFlags.None);
+                host.SendMouseClickEvent((int)x, (int)y, MouseButtonType.Left, false, 1, CefEventFlags.None);
+                host.SendMouseClickEvent((int)x, (int)y, MouseButtonType.Left, true, 1, CefEventFlags.None);
+                return Task.FromResult(true);
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Warning("CEF gerçek tıklama hatası: " + ex.Message);
+                return Task.FromResult(false);
+            }
+        }
+
         public async Task<bool> SetInputValueAsync(string[] selectors, string value, CancellationToken ct = default)
         {
             var script = JsHelper.BuildSetInputValueScript(selectors, value);

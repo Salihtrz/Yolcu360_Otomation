@@ -27,6 +27,13 @@ namespace Yolcu360.BusinessLayer.Abstract
         // ---- Element düzeyi yardımcılar (selector listesi alternatifli denenir) ----
         Task<bool> WaitForElementAsync(string[] selectors, int timeoutSeconds, CancellationToken ct = default);
         Task<bool> ClickElementAsync(string[] selectors, CancellationToken ct = default);
+
+        /// <summary>
+        /// Viewport koordinatına (CSS px) GERÇEK (trusted) fare tıklaması gönderir. JS ile dispatch
+        /// edilen olaylar isTrusted=false olduğu için bazı SPA widget'ları (ör. Yolcu360 saat seçici)
+        /// tepki vermez; bu metot gerçek girişle (WebView2: CDP Input.dispatchMouseEvent) çözer.
+        /// </summary>
+        Task<bool> RealClickAtAsync(double x, double y, CancellationToken ct = default);
         Task<bool> SetInputValueAsync(string[] selectors, string value, CancellationToken ct = default);
         Task<string> GetTextBySelectorsAsync(string[] selectors, CancellationToken ct = default);
         Task<List<string>> GetElementsTextAsync(string[] selectors, CancellationToken ct = default);

@@ -56,9 +56,34 @@ namespace Yolcu360.BusinessLayer.Concrete
                 LogHelper.Info($"Sayfa yuklendi (WebView2): {_browser.Source}");
             };
 
+            // VIEWPORT KİLİDİ: Yolcu360 responsive — DOM (ve selector'larımız) pencere genişliğiyle
+            // değişiyor. Pencere büyütülünce site masaüstü layout'una geçip selector'ları kırıyordu
+            // (ör. tarih takvimi). CDP ile sabit bir CSS viewport genişliği zorlanır; böylece pencere
+            // boyutu ne olursa olsun site HEP aynı (selector'larımızın çalıştığı) layout'u render eder.
+            await ApplyViewportLockAsync();
+
             IsInitialized = true;
             LogHelper.Info($"WebView2 tarayici kontrolu olusturuldu ({url}).");
             await LoadUrlAsync(url, ct);
+        }
+
+        /// <summary>
+        /// CDP Emulation.setDeviceMetricsOverride ile sabit bir CSS viewport zorlar (genişlik 820 =
+        /// tablet aralığı: site, selector'larımızın doğrulandığı layout'u render eder). Pencere
+        /// büyütülse/küçültülse bile site DOM'u değişmez. Best-effort: hata olursa yalnızca loglanır.
+        /// </summary>
+        private async Task ApplyViewportLockAsync()
+        {
+            try
+            {
+                var p = JsonConvert.SerializeObject(new { width = 1000, height = 980, deviceScaleFactor = 1, mobile = false });
+                await _browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Emulation.setDeviceMetricsOverride", p);
+                LogHelper.Info("WebView2 viewport sabitlendi (1000x980, tablet layout).");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Warning("Viewport kilidi uygulanamadı: " + ex.Message);
+            }
         }
 
         public Task LoadUrlAsync(string url, CancellationToken ct = default)
@@ -134,6 +159,31 @@ namespace Yolcu360.BusinessLayer.Concrete
                 ? $"Tiklandi: {selectors[0]} (ve alternatifleri)"
                 : $"Tiklanacak element bulunamadi: {string.Join(" | ", selectors)}");
             return ok;
+        }
+
+        public async Task<bool> RealClickAtAsync(double x, double y, CancellationToken ct = default)
+        {
+            EnsureInitialized();
+            try
+            {
+                ct.ThrowIfCancellationRequested();
+                var cwv = _browser.CoreWebView2;
+                // Gerçek (trusted) fare olayları: CDP Input.dispatchMouseEvent. Koordinatlar CSS px
+                // (getBoundingClientRect ile aynı düzlem). move → press → release sırasıyla gönderilir.
+                await cwv.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
+                    JsonConvert.SerializeObject(new { type = "mouseMoved", x, y }));
+                await cwv.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
+                    JsonConvert.SerializeObject(new { type = "mousePressed", x, y, button = "left", buttons = 1, clickCount = 1 }));
+                await cwv.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
+                    JsonConvert.SerializeObject(new { type = "mouseReleased", x, y, button = "left", buttons = 1, clickCount = 1 }));
+                return true;
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                LogHelper.Warning("WebView2 gerçek tıklama (CDP) hatası: " + ex.Message);
+                return false;
+            }
         }
 
         public async Task<bool> SetInputValueAsync(string[] selectors, string value, CancellationToken ct = default)

@@ -29,8 +29,13 @@ namespace Yolcu360.PresentationLayer.UI
                 DisabledState = { FillColor = Color.FromArgb(0xE5, 0xE7, 0xEB), ForeColor = Color.FromArgb(0x9C, 0xA3, 0xAF) }
             };
             b.ShadowDecoration.Enabled = false;
-            if (width > 0) b.Width = width;
-            ApplyVariant(b, variant);
+            ApplyVariant(b, variant); // varyant fontu da değiştirebilir (sidebar), ölçümden önce uygula
+
+            // Metni HER ZAMAN sığdır: ölçülen metin genişliği + iç boşluk. Verilen width yalnızca
+            // ALT SINIR'dır; metin daha genişse buton büyür. Böylece DPI/font ne olursa olsun
+            // buton yazıları kesilmez.
+            var needed = TextRenderer.MeasureText(text, b.Font).Width + 34;
+            b.Width = Math.Max(width, needed);
             return b;
         }
 

@@ -156,6 +156,345 @@ function __y360_val(el){
             }})();";
         }
 
+        // ====================== SAAT SEÇİMİ (gerçek DOM, 2026) ======================
+        // Sayfada tam 2 saat tetikleyicisi vardır: cursor:pointer, metni tam "HH:MM" olan DIV'ler
+        // (index 0 = Alış, 1 = Dönüş). Tıklayınca açılan menü body'ye taşınır ve seçenekler
+        //   <li class="... select-none list-none cursor-pointer">HH:MM</li>  (48 adet, 30 dk)
+        // şeklindedir. Menü YALNIZCA gerçek (CDP/trusted) tıklama ile açılır; JS .click() açmaz.
+        // Bu yüzden tetikleyiciler index ile bulunur, koordinatları CDP gerçek tıklamayla kullanılır.
+
+        /// <summary>Sayfadaki saat tetikleyicilerini (cursor:pointer, metni "HH:MM" DIV/SPAN/BUTTON) DOM sırasıyla toplar; LI seçenekleri hariç tutar.</summary>
+        private const string TimeTriggerCollect = @"
+            var __nodes = document.querySelectorAll('div, span, button');
+            var __trig = [];
+            for (var __i = 0; __i < __nodes.length; __i++) {
+                var __n = __nodes[__i];
+                if (__n.tagName === 'LI') continue;
+                var __t = (__n.textContent || '').trim();
+                if (/^\d{1,2}:\d{2}$/.test(__t)) {
+                    try { if (getComputedStyle(__n).cursor === 'pointer') __trig.push(__n); } catch (e) {}
+                }
+            }";
+
+        /// <summary>index. saat tetikleyicisinin viewport merkez koordinatını JSON ("{x,y}") döndürür (CDP tıklama için). Yoksa "".</summary>
+        public static string BuildGetTimeTriggerRectByIndexScript(int index)
+        {
+            return $@"(function(){{
+                {TimeTriggerCollect}
+                if (__trig.length <= {index}) return '';
+                var el = __trig[{index}];
+                try {{ el.scrollIntoView({{ block: 'center', inline: 'center' }}); }} catch (e) {{}}
+                var r = el.getBoundingClientRect();
+                return JSON.stringify({{ x: r.left + r.width / 2, y: r.top + r.height / 2 }});
+            }})();";
+        }
+
+        /// <summary>index. saat tetikleyicisinin O AN gösterdiği değeri ("HH:MM") döndürür; doğrulama için. Yoksa "".</summary>
+        public static string BuildGetDisplayedTimeByIndexScript(int index)
+        {
+            return $@"(function(){{
+                {TimeTriggerCollect}
+                if (__trig.length <= {index}) return '';
+                return (__trig[{index}].textContent || '').trim();
+            }})();";
+        }
+
+        /// <summary>Açık saat menüsü var mı? (metni HH:MM olan en az 10 li → menü açık).</summary>
+        public static string BuildIsTimeMenuOpenScript()
+        {
+            return @"(function(){
+                var lis = document.querySelectorAll('li');
+                var c = 0;
+                for (var i = 0; i < lis.length; i++) {
+                    if (/^\d{1,2}:\d{2}$/.test((lis[i].textContent || '').trim())) c++;
+                }
+                return c >= 10;
+            })();";
+        }
+
+        /// <summary>
+        /// Saat seçici tetikleyicisinin (etiketin yanındaki HH:MM gösteren cursor:pointer div)
+        /// VIEWPORT merkez koordinatını JSON ("{x,y}") döndürür; gerçek (CDP) fare tıklaması için.
+        /// Öğe görünür alana kaydırılır. Bulunamazsa "" döner.
+        /// </summary>
+        public static string BuildGetTimeTriggerRectScript(string labelText)
+        {
+            return $@"(function(){{
+                var label = {Json(labelText)};
+                var all = document.querySelectorAll('*');
+                for (var i = 0; i < all.length; i++) {{
+                    var n = all[i];
+                    if (n.childNodes.length === 1 && n.textContent.trim() === label) {{
+                        var c = n.parentElement;
+                        for (var up = 0; up < 4 && c; up++) {{
+                            var ds = c.querySelectorAll('div');
+                            for (var j = 0; j < ds.length; j++) {{
+                                var t = ds[j].textContent.trim();
+                                if (/^\d{{1,2}}:\d{{2}}$/.test(t)) {{
+                                    try {{
+                                        if (getComputedStyle(ds[j]).cursor === 'pointer') {{
+                                            ds[j].scrollIntoView({{ block: 'center', inline: 'center' }});
+                                            var r = ds[j].getBoundingClientRect();
+                                            return JSON.stringify({{ x: r.left + r.width / 2, y: r.top + r.height / 2 }});
+                                        }}
+                                    }} catch (e) {{}}
+                                }}
+                            }}
+                            c = c.parentElement;
+                        }}
+                    }}
+                }}
+                return '';
+            }})();";
+        }
+
+        /// <summary>
+        /// Açık saat listesinde metni hedefe (ör. "15:00") eşit GÖRÜNÜR li.hour-li öğesinin
+        /// viewport merkez koordinatını JSON ("{x,y}") döndürür. Liste içinde görünür alana kaydırılır.
+        /// Bulunamazsa "" döner.
+        /// </summary>
+        public static string BuildGetHourOptionRectScript(string target)
+        {
+            return $@"(function(){{
+                var target = {Json(target)};
+                var lis = document.querySelectorAll('li');
+                for (var i = 0; i < lis.length; i++) {{
+                    if ((lis[i].textContent || '').trim() === target) {{
+                        try {{ lis[i].scrollIntoView({{ block: 'center' }}); }} catch (e) {{}}
+                        var r = lis[i].getBoundingClientRect();
+                        if (r.width > 0 && r.height > 0)
+                            return JSON.stringify({{ x: r.left + r.width / 2, y: r.top + r.height / 2 }});
+                    }}
+                }}
+                return '';
+            }})();";
+        }
+
+        /// <summary>
+        /// Saat seçicinin O AN GÖSTERDİĞİ değeri (etiketin yanındaki cursor:pointer HH:MM div'i)
+        /// döndürür; seçim sonrası doğrulama (readback) için. Bulunamazsa "" döner.
+        /// </summary>
+        public static string BuildGetDisplayedTimeScript(string labelText)
+        {
+            return $@"(function(){{
+                var label = {Json(labelText)};
+                var all = document.querySelectorAll('*');
+                for (var i = 0; i < all.length; i++) {{
+                    var n = all[i];
+                    if (n.childNodes.length === 1 && n.textContent.trim() === label) {{
+                        var c = n.parentElement;
+                        for (var up = 0; up < 4 && c; up++) {{
+                            var ds = c.querySelectorAll('div');
+                            for (var j = 0; j < ds.length; j++) {{
+                                var t = ds[j].textContent.trim();
+                                if (/^\d{{1,2}}:\d{{2}}$/.test(t)) {{
+                                    try {{ if (getComputedStyle(ds[j]).cursor === 'pointer') return t; }} catch (e) {{}}
+                                }}
+                            }}
+                            c = c.parentElement;
+                        }}
+                    }}
+                }}
+                return '';
+            }})();";
+        }
+
+        /// <summary>
+        /// Açık saat listesinde metni hedefe eşit li.hour-li öğesini görünür alana kaydırıp
+        /// .click() (untrusted) ile seçmeyi dener. Liste açıkken li @click çoğunlukla yeterlidir.
+        /// </summary>
+        public static string BuildClickHourOptionJsScript(string target)
+        {
+            return $@"(function(){{
+                var target = {Json(target)};
+                var lis = document.querySelectorAll('li');
+                for (var i = 0; i < lis.length; i++) {{
+                    if ((lis[i].textContent || '').trim() === target) {{
+                        try {{ lis[i].scrollIntoView({{ block: 'center' }}); }} catch (e) {{}}
+                        try {{ lis[i].click(); return true; }} catch (e) {{}}
+                    }}
+                }}
+                return false;
+            }})();";
+        }
+
+        /// <summary>Açık saat menüsünün kaydırılabilir kapsayıcısını bir adım aşağı kaydırır (hedef alttaysa görünür olsun).</summary>
+        public static string BuildScrollHourListScript()
+        {
+            return @"(function(){
+                var lis = document.querySelectorAll('li');
+                var hourLi = null;
+                for (var i = 0; i < lis.length; i++) {
+                    if (/^\d{1,2}:\d{2}$/.test((lis[i].textContent || '').trim())) { hourLi = lis[i]; break; }
+                }
+                if (!hourLi) return false;
+                var el = hourLi.parentElement;
+                for (var up = 0; up < 6 && el; up++) {
+                    if (el.scrollHeight > el.clientHeight + 5) {
+                        el.scrollTop = Math.min(el.scrollTop + 130, el.scrollHeight);
+                        return true;
+                    }
+                    el = el.parentElement;
+                }
+                return true;
+            })();";
+        }
+
+        /// <summary>
+        /// Lokasyon autocomplete önerilerinden, yazılan metne EN İYİ eşleşeni tıklar (ilkini değil).
+        /// Türkçe karakterler normalize edilir; yazılan metnin tokenleri öneri metninde aranır,
+        /// tam içerme bonuslu. Hiç eşleşme yoksa ilk öneriye düşer. true/false döner.
+        /// </summary>
+        public static string BuildClickBestLocationSuggestionScript(string[] selectors, string typed)
+        {
+            return $@"(function(){{
+                var sels = {Json(selectors)};
+                function norm(s){{ return (s||'').toLowerCase()
+                    .replace(/ı/g,'i').replace(/İ/g,'i').replace(/ş/g,'s').replace(/Ş/g,'s')
+                    .replace(/ğ/g,'g').replace(/Ğ/g,'g').replace(/ü/g,'u').replace(/Ü/g,'u')
+                    .replace(/ö/g,'o').replace(/Ö/g,'o').replace(/ç/g,'c').replace(/Ç/g,'c'); }}
+                var tn = norm({Json(typed)});
+                var tokens = tn.split(/[^a-z0-9]+/).filter(function(w){{ return w.length >= 3; }});
+                var items = [];
+                for (var i = 0; i < sels.length; i++) {{
+                    try {{ var n = document.querySelectorAll(sels[i]); if (n.length) {{ items = Array.prototype.slice.call(n); break; }} }} catch (e) {{}}
+                }}
+                if (!items.length) return false;
+                var best = null, bestScore = -1;
+                for (var j = 0; j < items.length; j++) {{
+                    var txt = norm(items[j].innerText || items[j].textContent || '');
+                    var score = 0;
+                    for (var k = 0; k < tokens.length; k++) {{ if (txt.indexOf(tokens[k]) >= 0) score++; }}
+                    if (tn && txt.indexOf(tn) >= 0) score += 5;
+                    if (score > bestScore) {{ bestScore = score; best = items[j]; }}
+                }}
+                try {{ (best && bestScore > 0 ? best : items[0]).click(); return true; }} catch (e) {{ return false; }}
+            }})();";
+        }
+
+        /// <summary>Verilen selector listesindeki ilk inputun O ANKİ value'sunu döndürür (lokasyon doğrulama). Yoksa "".</summary>
+        public static string BuildGetInputValueScript(string[] selectors)
+        {
+            return $@"(function(){{
+                {LibPreamble}
+                var el = __y360_first({Json(selectors)});
+                return el ? (el.value || '') : '';
+            }})();";
+        }
+
+        /// <summary>
+        /// TEŞHİS: Saat seçicinin gerçek DOM yapısını döndürür (JSON). Hangi selector'ların var
+        /// olduğunu kör tahmin etmemek için: li.hour-li sayısı + örnek metinleri, görünür HH:MM
+        /// cursor:pointer tetikleyici metinleri, &lt;select&gt; var mı, ve olası saat kapsayıcısının
+        /// kırpılmış outerHTML'i. Logdan canlı DOM görülüp selector'lar kesinleştirilir.
+        /// </summary>
+        public static string BuildDumpTimeDomScript()
+        {
+            return @"(function(){
+                var info = { hourLiCount: 0, hourSamples: [], triggers: [], selects: 0, selectSamples: [], html: '' };
+                var lis = document.querySelectorAll('li.hour-li');
+                info.hourLiCount = lis.length;
+                for (var i = 0; i < lis.length && i < 8; i++) info.hourSamples.push((lis[i].textContent||'').trim());
+
+                var divs = document.querySelectorAll('div, span, button');
+                for (var j = 0; j < divs.length && info.triggers.length < 10; j++){
+                    var t = (divs[j].textContent||'').trim();
+                    if (/^\d{1,2}:\d{2}$/.test(t)){
+                        var cur=''; try { cur = getComputedStyle(divs[j]).cursor; } catch(e){}
+                        info.triggers.push(divs[j].tagName + '[' + (divs[j].className||'') + '] cur=' + cur + ' txt=' + t);
+                    }
+                }
+
+                var sels = document.querySelectorAll('select');
+                info.selects = sels.length;
+                for (var k = 0; k < sels.length && k < 4; k++){
+                    var opts = sels[k].querySelectorAll('option');
+                    var sample = [];
+                    for (var m = 0; m < opts.length && m < 4; m++) sample.push((opts[m].textContent||'').trim());
+                    info.selectSamples.push('name=' + (sels[k].name||'') + ' id=' + (sels[k].id||'') + ' opts=' + sample.join('|'));
+                }
+
+                var cont = null;
+                if (lis.length){ cont = lis[0]; for (var u=0; u<6 && cont.parentElement; u++) cont = cont.parentElement; }
+                else { var mh = document.querySelector('.month-header'); if (mh){ cont = mh; for (var u2=0; u2<5 && cont.parentElement; u2++) cont = cont.parentElement; } }
+                if (cont) info.html = (cont.outerHTML || '').replace(/\s+/g,' ').slice(0, 4500);
+                return JSON.stringify(info);
+            })();";
+        }
+
+        /// <summary>
+        /// TEŞHİS-2: Saat tetikleyicisi (etiketin yanındaki cursor:pointer HH:MM div) gerçek
+        /// tıklandıktan SONRA, onun dropdown-kök atasının (class'ında 'relative' geçen) outerHTML'ini
+        /// döndürür. Açılan menünün/saat seçeneklerinin gerçek DOM yapısını görmek için.
+        /// </summary>
+        public static string BuildDumpTimeDropdownScript(string labelText)
+        {
+            return $@"(function(){{
+                var label = {Json(labelText)};
+                var all = document.querySelectorAll('*');
+                for (var i = 0; i < all.length; i++) {{
+                    var n = all[i];
+                    if (n.childNodes.length === 1 && (n.textContent || '').trim() === label) {{
+                        var c = n.parentElement;
+                        for (var up = 0; up < 4 && c; up++) {{
+                            var ds = c.querySelectorAll('div');
+                            for (var j = 0; j < ds.length; j++) {{
+                                var t = (ds[j].textContent || '').trim();
+                                if (/^\d{{1,2}}:\d{{2}}$/.test(t)) {{
+                                    try {{
+                                        if (getComputedStyle(ds[j]).cursor === 'pointer') {{
+                                            var root = ds[j];
+                                            for (var u = 0; u < 7 && root.parentElement; u++) {{
+                                                root = root.parentElement;
+                                                if ((root.className || '').indexOf('relative') >= 0) break;
+                                            }}
+                                            return (root.outerHTML || '').replace(/\s+/g, ' ').slice(0, 6000);
+                                        }}
+                                    }} catch (e) {{}}
+                                }}
+                            }}
+                            c = c.parentElement;
+                        }}
+                    }}
+                }}
+                return 'TRIGGER_NOT_FOUND';
+            }})();";
+        }
+
+        /// <summary>
+        /// TEŞHİS-3: Açık saat menüsünü TÜM dökümanı tarayarak bulur (Vue Teleport/portal ile
+        /// body'ye taşınmış olabilir). En çok HH:MM çocuğu içeren görünür kapsayıcıyı seçer ve
+        /// yapısını (tag, class, çocuk tag/class, örnek metinler, kırpılmış HTML) JSON döndürür.
+        /// Bu sayede saat seçeneklerinin gerçek selector'ı (li mi, div mi, hangi class) öğrenilir.
+        /// </summary>
+        public static string BuildDumpOpenTimeMenuScript()
+        {
+            return @"(function(){
+                var all = document.querySelectorAll('ul, ol, div, [role=menu], [role=listbox]');
+                var best = null, bestCount = 0;
+                for (var i = 0; i < all.length; i++){
+                    var el = all[i];
+                    var kids = el.children;
+                    var cnt = 0;
+                    for (var j = 0; j < kids.length; j++){
+                        var t = (kids[j].textContent || '').trim();
+                        if (/^\d{1,2}:\d{2}$/.test(t)) cnt++;
+                    }
+                    if (cnt > bestCount){ bestCount = cnt; best = el; }
+                }
+                if (!best || bestCount < 2) return JSON.stringify({ found: false, count: bestCount });
+                var info = { found: true, optCount: bestCount, tag: best.tagName, cls: best.className,
+                             childCount: best.children.length,
+                             childTag: best.children[0] ? best.children[0].tagName : '',
+                             childCls: best.children[0] ? best.children[0].className : '',
+                             samples: [] };
+                for (var k = 0; k < best.children.length && k < 8; k++)
+                    info.samples.push((best.children[k].textContent || '').trim());
+                info.html = (best.outerHTML || '').replace(/\s+/g, ' ').slice(0, 2500);
+                return JSON.stringify(info);
+            })();";
+        }
+
         /// <summary>
         /// Açık saat listesinde metni hedef saate (ör. "08:00") eşit olan li.hour-li
         /// öğesine tıklar. Önce görünür olanı dener. true/false döner.
@@ -204,6 +543,32 @@ function __y360_val(el){
                     if (el.id && el.id.indexOf(prefix) === 0) {{
                         var want = keep.indexOf(el.id) >= 0;
                         if (el.checked !== want) el.click();
+                    }}
+                }});
+                return true;
+            }})();";
+        }
+
+        /// <summary>
+        /// Bir radio grubunu (ör. 'filter-distance_limit.' / 'filter-provision.') tek seçimli
+        /// olarak ayarlar. <paramref name="chosenId"/> verilmişse o radio seçilir (gerekirse tıklanır);
+        /// diğer tüm grup radio'ları temizlenir. <paramref name="chosenId"/> boş/null ise grup tümüyle
+        /// temizlenir (radio'lar tıkla ile kapanmadığından el.checked=false + change dispatch edilir).
+        /// id'de nokta/artı/boşluk olabildiği için CSS yerine id.indexOf(prefix) ile eşleştirilir.
+        /// </summary>
+        public static string BuildSetRadioScript(string idPrefix, string chosenId)
+        {
+            return $@"(function(){{
+                var prefix = {Json(idPrefix)};
+                var chosen = {Json(chosenId ?? "")};
+                document.querySelectorAll('input[type=radio]').forEach(function(el){{
+                    if (el.id && el.id.indexOf(prefix) === 0) {{
+                        if (chosen && el.id === chosen) {{
+                            if (!el.checked) el.click();
+                        }} else if (el.checked) {{
+                            el.checked = false;
+                            el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                        }}
                     }}
                 }});
                 return true;
@@ -270,6 +635,62 @@ function __y360_val(el){
             }})();";
         }
 
+        /// <summary>
+        /// Sonuç sayfasındaki filtre panelini (#stickyFilterCardContent) dinamik okur.
+        /// Her &lt;details data-cms-key&gt; bölümü için başlık + tüm filter-* seçeneklerini
+        /// (id, etiket "(adet)" ayıklanmış, input tipi) JSON dizisi olarak döndürür.
+        /// Böylece marka/şirket/model gibi listeler uygulamada SABİT tutulmaz, siteden gelir.
+        /// </summary>
+        public static string BuildScrapeFiltersScript()
+        {
+            return @"(function(){
+                var root = document.querySelector('#stickyFilterCardContent');
+                if (!root) return JSON.stringify([]);
+                var out = [];
+                root.querySelectorAll('details').forEach(function(d){
+                    var key = d.getAttribute('data-cms-key') || '';
+                    var t = d.querySelector('summary .font-semibold');
+                    var title = t ? (t.innerText || t.textContent || '').trim() : key;
+                    var seen = {};
+                    var opts = [];
+                    d.querySelectorAll('input[id^=""filter-""]').forEach(function(inp){
+                        var id = inp.id;
+                        if (!id || seen[id]) return; seen[id] = 1;
+                        var lbl = inp.closest('label') || inp.parentElement;
+                        var txt = lbl ? (lbl.innerText || lbl.textContent || '').trim() : '';
+                        txt = txt.replace(/\s*\(\d+\)\s*$/, '').trim();
+                        opts.push({ id: id, label: txt, type: inp.type });
+                    });
+                    if (opts.length > 0)
+                        out.push({ key: key, title: title, type: opts[0].type, options: opts });
+                });
+                return JSON.stringify(out);
+            })();";
+        }
+
+        /// <summary>
+        /// Sitenin gösterebildiği bilgi/uyarı modalını (ör. saat dilimi uyarısı, çerez "Kabul Et")
+        /// best-effort kapatır: metni Tamam/Kapat/Kabul Et/Anladım olan görünür buton/öğeye tıklar.
+        /// true = bir şey tıklandı.
+        /// </summary>
+        public static string BuildDismissModalScript()
+        {
+            return @"(function(){
+                var words = ['Tamam','Kapat','Kabul Et','Anladım','Anladim','Devam','Reddet'];
+                var nodes = document.querySelectorAll(""button, a, span, div, [role='button']"");
+                for (var i = 0; i < nodes.length; i++){
+                    var el = nodes[i];
+                    var txt = (el.innerText || el.textContent || '').trim();
+                    for (var j = 0; j < words.length; j++){
+                        if (txt === words[j]){
+                            try { if (el.offsetParent !== null) { el.click(); return true; } } catch(e){}
+                        }
+                    }
+                }
+                return false;
+            })();";
+        }
+
         /// <summary>İlk eşleşen elemana tıklar. true/false döner.</summary>
         public static string BuildClickScript(string[] selectors)
         {
@@ -288,6 +709,19 @@ function __y360_val(el){
             return $@"(function(){{
                 {LibPreamble}
                 return __y360_first({Json(selectors)}) != null;
+            }})();";
+        }
+
+        /// <summary>Mevcut sonuç kartı sayısını (string) döndürür; lazy-load'da "hepsi yüklendi mi" kontrolü için.</summary>
+        public static string BuildCountResultsScript(string[] cardSelectors)
+        {
+            return $@"(function(){{
+                {LibPreamble}
+                var sels = {Json(cardSelectors)};
+                for (var i=0;i<sels.length;i++){{
+                    try {{ var n=document.querySelectorAll(sels[i]); if (n.length>0) return String(n.length); }} catch(e){{}}
+                }}
+                return '0';
             }})();";
         }
 
