@@ -1,0 +1,54 @@
+# ---- Visual Studio / .NET build cikti ve gecici dosyalari ----
+# Bunlar derleme sirasinda otomatik uretilir, kaynak kod degildir ve commit edilmemelidir.
+# (CefSharp'in 100MB+ libcef.dll dosyalari da bin/ altinda oldugundan buraya dahildir.)
+
+# Build cikti klasorleri
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio ayar/cache klasoru
+.vs/
+
+# Rider / JetBrains
+.idea/
+
+# Kullanici-ozel proje dosyalari
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Build sonuclari
+*.dll
+*.exe
+*.pdb
+*.cache
+*.dbcache
+*.dtbcache.v2
+*.futdcache.v2
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+
+# CefSharp / WebView2 cache ve runtime
+CefCache/
+WebView2Profile/
+
+# Test sonuclari
+[Tt]est[Rr]esult*/
+*.coverage
+*.coveragexml
+
+# Diger
+*.log
+*.tmp
+*.bak
+Thumbs.db
+desktop.ini

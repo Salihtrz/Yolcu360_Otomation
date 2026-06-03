@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="Yolcu360.EntityLayer/Yolcu360.EntityLayer.csproj" />
+  <Project Path="Yolcu360.Common/Yolcu360.Common.csproj" />
+  <Project Path="Yolcu360.DtoLayer/Yolcu360.DtoLayer.csproj" />
+  <Project Path="Yolcu360.DataAccessLayer/Yolcu360.DataAccessLayer.csproj" />
+  <Project Path="Yolcu360.BusinessLayer/Yolcu360.BusinessLayer.csproj" />
+  <Project Path="Yolcu360.PresentationLayer/Yolcu360.PresentationLayer.csproj" />
+</Solution>

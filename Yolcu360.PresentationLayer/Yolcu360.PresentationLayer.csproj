@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RootNamespace>Yolcu360.PresentationLayer</RootNamespace>
+    <AssemblyName>Yolcu360.PresentationLayer</AssemblyName>
+    <!-- Custom kontrollerde designer serileştirme uyarısı (designer kullanılmıyor, tüm UI kodla). -->
+    <NoWarn>$(NoWarn);WFO1000</NoWarn>
+    <!-- RID belirtilince CefSharp managed/native dosyaları doğrudan exe yanına (köke)
+         yerleşir ve deps.json onları kökten referans alır; böylece mixed-mode
+         CefSharp.Core.Runtime.dll native bağımlılıklarını (libcef.dll) bulabilir.
+         SelfContained=false ile çıktı framework-bağımlı (küçük) kalır. -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CefSharp.WinForms.NETCore" Version="147.0.100" />
+    <!-- CEF native çalışma zamanı (libcef.dll, icudtl.dat, *.pak, locales). RID ile
+         libcef köke kopyalanır; aşağıdaki hedef ek kaynakları (pak/locale) garantiler. -->
+    <PackageReference Include="chromiumembeddedframework.runtime.win-x64" Version="147.0.10" />
+    <!-- Modern WinForms UI kütüphanesi (yuvarlak butonlar, gölgeli paneller). -->
+    <PackageReference Include="Guna.UI2.WinForms" Version="2.0.4.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Yolcu360.BusinessLayer\Yolcu360.BusinessLayer.csproj" />
+    <ProjectReference Include="..\Yolcu360.DtoLayer\Yolcu360.DtoLayer.csproj" />
+    <ProjectReference Include="..\Yolcu360.EntityLayer\Yolcu360.EntityLayer.csproj" />
+    <ProjectReference Include="..\Yolcu360.Common\Yolcu360.Common.csproj" />
+  </ItemGroup>
+
+  <!-- CEF redist dosyalarını (libcef, icudtl, *.pak, locales) exe dizinine kopyalar. -->
+  <Target Name="CopyCefResources" AfterTargets="Build;Publish" DependsOnTargets="CefRedist64CopyResources" />
+
+</Project>
