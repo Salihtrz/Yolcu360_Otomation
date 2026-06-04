@@ -23,7 +23,6 @@ namespace Yolcu360.PresentationLayer
         private List<ResultCarDto> _gridView = new();   // grid'de o an bağlı (ada göre filtrelenmiş) liste
         private CancellationTokenSource _searchCts;
         private CancellationTokenSource _imageCts;
-        private OtpLoginForm _otpLoginForm;
         private bool _browserVisible = false;
         private bool _appClosing;
         private string _sortProperty;
@@ -98,6 +97,9 @@ namespace Yolcu360.PresentationLayer
             WindowState = FormWindowState.Maximized;
             BackColor = ThemeColors.Background;
             Font = UiStyleHelper.BaseFont;
+            // ZORUNLU GİRİŞ KAPISI: kullanıcı giriş yapana kadar ana pencere görünmez kalır
+            // (OnLoadAsync'te AuthForm modal olarak açılır, başarılı olunca Opacity=1 yapılır).
+            Opacity = 0;
 
             BuildUi();
             Load += OnLoadAsync;
@@ -823,6 +825,19 @@ namespace Yolcu360.PresentationLayer
                 await _services.BrowserService.InitializeAsync(Yolcu360Constants.HomeUrl);
                 AttachBrowserControl();
                 await LoadProfilesAsync();
+
+                // ZORUNLU GİRİŞ: ana pencereyi açmadan önce AuthForm'u modal göster. Kullanıcı
+                // e-posta/şifre ile giriş yapıp Yolcu360 SMS oturumu tamamlanmadan uygulamaya girilemez.
+                if (!RunAuthGate())
+                {
+                    _appClosing = true;
+                    Close();
+                    return;
+                }
+
+                Opacity = 1; // giriş başarılı → ana pencere görünür
+                Activate();
+                MarkLoggedIn(true);
                 SetStatus("Hazir.");
             }
             catch (Exception ex)
@@ -835,6 +850,17 @@ namespace Yolcu360.PresentationLayer
             {
                 SetBusy(false);
             }
+        }
+
+        /// <summary>
+        /// Zorunlu giriş kapısı. AuthForm'u modal açar; e-posta/şifre + Yolcu360 SMS akışı başarıyla
+        /// tamamlanırsa true döner. Kullanıcı vazgeçerse (pencereyi kapatırsa) false → uygulama kapanır.
+        /// </summary>
+        private bool RunAuthGate()
+        {
+            using var auth = new AuthForm(_services);
+            var result = auth.ShowDialog(this);
+            return result == DialogResult.OK && auth.AuthSucceeded;
         }
 
         private void OnClosing(object sender, FormClosingEventArgs e)
@@ -1193,15 +1219,10 @@ namespace Yolcu360.PresentationLayer
 
         private void OnAutoLoginClick(object sender, EventArgs e)
         {
-            if (_otpLoginForm != null && !_otpLoginForm.IsDisposed)
-            {
-                _otpLoginForm.Show();
-                _otpLoginForm.Activate();
-                return;
-            }
-            _otpLoginForm = new OtpLoginForm(_services, RevealBrowser, MarkLoggedIn);
-            _otpLoginForm.FormClosed += (s, args) => _otpLoginForm = null;
-            _otpLoginForm.Show(this);
+            // Yeniden giriş: aynı AuthForm kapısını modal aç. Başarılı olursa giriş durumu güncellenir.
+            using var auth = new AuthForm(_services);
+            if (auth.ShowDialog(this) == DialogResult.OK && auth.AuthSucceeded)
+                MarkLoggedIn(true);
         }
 
         /// <summary>

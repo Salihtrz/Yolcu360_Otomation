@@ -8,9 +8,33 @@ namespace Yolcu360.BusinessLayer.Abstract
     /// </summary>
     public interface IUserService
     {
-        Task<int> RegisterAsync(LoginUserDto dto, CancellationToken ct = default);
+        /// <summary>
+        /// Yeni kullanıcı kaydeder (e-posta + şifre + telefon). Şifre DB'ye HASH'lenerek saklanır.
+        /// Boş alan, geçersiz e-posta veya zaten var olan e-posta durumunda kullanıcıya gösterilebilir
+        /// mesajla <c>AuthenticationException</c> fırlatır. Oluşan kullanıcının Id'sini döner.
+        /// </summary>
+        Task<int> RegisterAsync(RegisterUserDto dto, CancellationToken ct = default);
         Task<User> ValidateAsync(LoginUserDto dto, CancellationToken ct = default);
         Task<List<User>> GetAllAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// E-posta/şifre ile uygulama girişi yapar. Doğrulama başarılıysa aktif kullanıcının
+        /// kimliği ve Yolcu360 telefon numarası ile <see cref="AuthenticatedUserDto"/> döner.
+        /// Başarısızlıkta kullanıcıya gösterilebilecek anlamlı bir mesajla
+        /// <c>AuthenticationException</c> fırlatır (boş alan, kullanıcı yok, şifre hatalı,
+        /// telefon yok, veritabanı erişilemedi).
+        /// </summary>
+        Task<AuthenticatedUserDto> LoginAsync(LoginUserDto dto, CancellationToken ct = default);
+
+        /// <summary>E-postaya göre kullanıcı getirir; yoksa null döner.</summary>
+        Task<User> GetUserByEmailAsync(string email, CancellationToken ct = default);
+
+        /// <summary>
+        /// Girilen şifrenin, veritabanında saklanan HASH ile eşleşip eşleşmediğini döner (PBKDF2,
+        /// sabit-zamanlı karşılaştırma). Saklanan değer geçerli bir hash değilse (ör. eski düz metin
+        /// kayıt) false döner; bu kullanıcılar yeniden kayıt olmalıdır (hash-only politikası).
+        /// </summary>
+        bool ValidatePassword(string inputPassword, string storedPasswordOrHash);
 
         /// <summary>Varsayılan/aktif yerel kullanıcıyı getirir; yoksa null döner.</summary>
         Task<User> GetActiveUserAsync(CancellationToken ct = default);

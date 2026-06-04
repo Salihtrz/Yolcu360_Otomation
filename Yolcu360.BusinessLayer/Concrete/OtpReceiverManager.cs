@@ -235,6 +235,9 @@ namespace Yolcu360.BusinessLayer.Concrete
                 catch (OperationCanceledException) { break; }
                 catch (ObjectDisposedException) { break; }
                 catch { break; }
+                // Teşhis: bir bağlantının gerçekten ULAŞTIĞINI doğrula (kod/token loglanmaz).
+                // Bu satır hiç görünmüyorsa: paket bilgisayara gelmiyor (güvenlik duvarı / yanlış IP-port).
+                try { LogHelper.Info($"OTP: TCP bağlantısı alındı ({(client.Client.RemoteEndPoint?.ToString() ?? "?")})."); } catch { }
                 _ = Task.Run(() => HandleTcpClientAsync(client, ct));
             }
         }

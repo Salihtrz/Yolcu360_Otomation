@@ -3,6 +3,7 @@ using Yolcu360.BusinessLayer.Concrete;
 using Yolcu360.DataAccessLayer.Abstract;
 using Yolcu360.DataAccessLayer.Context;
 using Yolcu360.DataAccessLayer.Repositories;
+using Yolcu360.DtoLayer.UserDto;
 
 namespace Yolcu360.BusinessLayer
 {
@@ -31,6 +32,13 @@ namespace Yolcu360.BusinessLayer
         public ISimulatedRentalService SimulatedRentalService { get; }
         public ISimulationPngService SimulationPngService { get; }
         public DatabaseInitializer DatabaseInitializer { get; }
+
+        /// <summary>
+        /// Başarılı uygulama girişinden sonra bellekte tutulan AKTİF kullanıcı. Yolcu360 SMS/OTP
+        /// giriş akışı bu kullanıcının (DB'den gelen) PhoneNumber'ı ile başlatılır. Giriş yapılmadıysa
+        /// null'dır; çıkışta tekrar null yapılabilir. Yalnızca bellekte tutulur (kalıcı değildir).
+        /// </summary>
+        public AuthenticatedUserDto CurrentUser { get; set; }
 
         public AppServices()
         {
@@ -63,7 +71,7 @@ namespace Yolcu360.BusinessLayer
             // Telefon + SMS/OTP giriş akışı (yalnızca kullanıcının kendi hesabı içindir).
             // GİRİŞ AYRI bir WebView2 tarayıcısında yapılır: gerçek Edge runtime reCAPTCHA'yı geçer
             // (CefSharp gömülü olduğu için düşük puan alıp engelleniyordu). Giriş başarılı olunca
-            // oturum çerezleri CefSharp otomasyon tarayıcısına köprülenir (OtpLoginForm).
+            // oturum çerezleri CefSharp otomasyon tarayıcısına köprülenir (AuthForm).
             OtpReceiverService = new OtpReceiverManager();
             LoginBrowserService = new WebView2BrowserManager();
             LoginAutomationService = new LoginAutomationManager(LoginBrowserService);
