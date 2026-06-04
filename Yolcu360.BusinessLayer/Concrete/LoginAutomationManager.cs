@@ -51,14 +51,28 @@ namespace Yolcu360.BusinessLayer.Concrete
             await _browser.EvaluateBoolAsync(JsHelper.BuildTypeRealScript(Yolcu360LoginSelectors.PhoneInputSelectors, normalized), ct);
             LogHelper.Info($"Telefon numarasi siteye yazildi: {MaskPhone(normalized)}");
 
-            // Do not click Continue automatically. Yolcu360 reCAPTCHA accepts a real user
-            // mouse click more reliably than a JavaScript/automation click.
-            Report("Telefon yazildi. Sag tarafta Devam Et'e fareyle siz basin...");
-            LogHelper.Info("Devam/Kod Gonder butonu otomatik tiklanmadi; kullanici tiklamasi bekleniyor.");
+            // "Devam Et" OTOMATIK tiklanir (kullanici tercihi: tarayici gizli + tam otomatik).
+            // NOT: Yolcu360 reCAPTCHA otomatik tiklamayi bot sanip engelleyebilir; bu durumda asagidaki
+            // OTP-ekrani bekleme adimi basarisiz olur ve tarayici GORUNUR yapilip kullaniciya elle
+            // tamamlamasi bildirilir (bypass YOK, guvenli fallback).
+            await Task.Delay(400, ct); // numara input/change/blur event'leri otursun
+            Report("Devam Et'e tiklaniyor...");
+            var clicked = await _browser.ClickElementAsync(Yolcu360LoginSelectors.PhoneContinueButtonSelectors, ct);
+            if (!clicked)
+                clicked = await _browser.EvaluateBoolAsync(JsHelper.BuildClickByTextScript(Yolcu360LoginSelectors.PhoneContinueButtonTexts), ct);
+            LogHelper.Info(clicked ? "Devam Et otomatik tiklandi." : "Devam Et butonu bulunamadi/tiklanamadi.");
 
-            var otpScreen = await _browser.WaitForElementAsync(Yolcu360LoginSelectors.OtpScreenIndicatorSelectors, 90, ct);
+            // SMS kod ekraninin gelmesini bekle (~25 sn). reCAPTCHA engellerse veya buton tiklanamadiysa
+            // gelmez → tarayiciyi gorunur yapip kullaniciya elle devam ettir.
+            var otpScreen = await _browser.WaitForElementAsync(Yolcu360LoginSelectors.OtpScreenIndicatorSelectors, 25, ct);
             if (!otpScreen)
-                LogHelper.Warning("SMS kod ekrani algilanamadi; kod geldiginde yine de yazma denenecek.");
+            {
+                _browser.SetBrowserVisible(true);
+                LogHelper.Warning("SMS kod ekrani algilanamadi (reCAPTCHA/otomatik tiklama engellenmis olabilir); tarayici gorunur yapildi.");
+                throw new AutomationException(
+                    "Yolcu360 otomatik devam adimini engelledi olabilir. Tarayici goruntulendi; " +
+                    "lutfen 'Devam Et'e elle basin. SMS kodu yine de otomatik girilecek.");
+            }
 
             Report("SMS kodu bekleniyor...");
         }
