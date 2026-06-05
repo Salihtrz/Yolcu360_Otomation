@@ -1,3 +1,7 @@
+using Yolcu360.BusinessLayer.Abstract.Automation;
+using Yolcu360.BusinessLayer.Abstract.Browser;
+using Yolcu360.BusinessLayer.Concrete.Automation;
+using Yolcu360.BusinessLayer.Concrete.Browser;
 using Yolcu360.BusinessLayer.Abstract;
 using Yolcu360.BusinessLayer.Concrete;
 using Yolcu360.DataAccessLayer.Abstract;
@@ -20,7 +24,10 @@ namespace Yolcu360.BusinessLayer
         public ICefSharpBrowserService BrowserService { get; }
         /// <summary>Yalnızca GİRİŞ (login) için ayrı WebView2 tarayıcısı (reCAPTCHA gerçek Edge'de geçer).</summary>
         public ICefSharpBrowserService LoginBrowserService { get; }
-        public IYolcu360AutomationService AutomationService { get; }
+        /// <summary>Arama formunu doldurur ve aramayı tetikler (kazımayı CarScrapingService'e devreder).</summary>
+        public ICarSearchService CarSearchService { get; }
+        /// <summary>Sonuç sayfasının DOM'unu okuyup araç kartlarını DTO'lara çevirir (scraping).</summary>
+        public ICarScrapingService CarScrapingService { get; }
         /// <summary>Seçili aracın firmasının site üzerindeki değerlendirmelerini OKUR (salt-okunur).</summary>
         public ISupplierReviewService ReviewService { get; }
         public IPngReportService PngReportService { get; }
@@ -29,7 +36,7 @@ namespace Yolcu360.BusinessLayer
         public ISearchProfileService SearchProfileService { get; }
         public IOtpReceiverService OtpReceiverService { get; }
         public ILoginAutomationService LoginAutomationService { get; }
-        public ISimulatedRentalService SimulatedRentalService { get; }
+        public IRentalSimulationService RentalSimulationService { get; }
         public ISimulationPngService SimulationPngService { get; }
         public DatabaseInitializer DatabaseInitializer { get; }
 
@@ -60,7 +67,9 @@ namespace Yolcu360.BusinessLayer
             // Aktif tarayıcı motoru: CefSharp (Chromium). Viewport kilidi + CDP gerçek tıklama
             // DevTools (CEF UI thread'ine marshal edilerek) ile karşılanır (bkz. CefSharpBrowserManager).
             BrowserService = new CefSharpBrowserManager();
-            AutomationService = new Yolcu360AutomationManager(BrowserService);
+            // Otomasyon iki sorumluluğa ayrıldı: arama (form doldurma/tetikleme) + kazıma (DOM okuma).
+            CarScrapingService = new CarScrapingManager(BrowserService);
+            CarSearchService = new CarSearchManager(BrowserService, CarScrapingService);
             // Firma değerlendirme okuma: otomasyon tarayıcısının (CefSharp) o anki sonuç sayfasını kullanır.
             ReviewService = new SupplierReviewManager(BrowserService);
             PngReportService = new PngReportManager();
@@ -77,7 +86,7 @@ namespace Yolcu360.BusinessLayer
             LoginAutomationService = new LoginAutomationManager(LoginBrowserService);
 
             // Araç kiralama SİMÜLASYONU (gerçek rezervasyon/ödeme yok).
-            SimulatedRentalService = new SimulatedRentalManager(simulatedRentalRepository);
+            RentalSimulationService = new RentalSimulationManager(simulatedRentalRepository);
             SimulationPngService = new SimulationPngManager();
         }
     }

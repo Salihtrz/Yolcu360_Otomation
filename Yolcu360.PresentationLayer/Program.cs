@@ -22,7 +22,6 @@ namespace Yolcu360.PresentationLayer
             }
             finally
             {
-                // CefSharp düzgün kapatılmalı (aksi halde alt süreçler kalabilir).
                 if (Cef.IsInitialized == true)
                     Cef.Shutdown();
             }

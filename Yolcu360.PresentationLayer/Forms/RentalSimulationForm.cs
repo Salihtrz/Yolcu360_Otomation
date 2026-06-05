@@ -17,7 +17,7 @@ namespace Yolcu360.PresentationLayer.Forms
     /// </summary>
     public class RentalSimulationForm : Form
     {
-        private readonly ISimulatedRentalService _service;
+        private readonly IRentalSimulationService _service;
         private readonly ISimulationPngService _pngService;
         private readonly ResultCarDto _car;
         private static readonly HttpClient _http = new();
@@ -60,7 +60,7 @@ namespace Yolcu360.PresentationLayer.Forms
         /// <summary>Tamamlanan simülasyonun özeti (MainForm mesajı için). Null = tamamlanmadı.</summary>
         public RentalSimulationSummaryDto CompletedSummary { get; private set; }
 
-        public RentalSimulationForm(ISimulatedRentalService service, ISimulationPngService pngService, ResultCarDto car)
+        public RentalSimulationForm(IRentalSimulationService service, ISimulationPngService pngService, ResultCarDto car)
         {
             _service = service;
             _pngService = pngService;

@@ -1,6 +1,6 @@
 using Newtonsoft.Json;
 
-namespace Yolcu360.Common.Helpers
+namespace Yolcu360.Common.Automation
 {
     /// <summary>
     /// CefSharp içinde çalıştırılacak JavaScript kod parçalarını string olarak üretir.

@@ -6,10 +6,6 @@ using Yolcu360.DtoLayer.CarResultDto;
 
 namespace Yolcu360.BusinessLayer.Concrete
 {
-    /// <summary>
-    /// Araç sonuçlarını CSV'ye yazar. Türkçe karakterler ve Excel uyumu için UTF-8 BOM ile
-    /// yazılır ve ayraç olarak noktalı virgül (;) kullanılır (Türkçe Excel varsayılanı).
-    /// </summary>
     public class CsvReportManager : ICsvReportService
     {
         private static readonly string[] Headers =
@@ -51,13 +47,11 @@ namespace Yolcu360.BusinessLayer.Concrete
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
 
-                // UTF-8 BOM => Excel Türkçe karakterleri doğru gösterir.
                 await File.WriteAllTextAsync(filePath, sb.ToString(), new UTF8Encoding(true), ct);
                 LogHelper.Info($"CSV raporu oluşturuldu: {filePath} ({cars.Count} araç).");
             }, ct);
         }
 
-        /// <summary>CSV alanını kaçışlar: ayraç, tırnak veya satır sonu varsa tırnak içine alır.</summary>
         private static string Escape(string value)
         {
             value ??= "";

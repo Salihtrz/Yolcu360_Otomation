@@ -6,17 +6,11 @@ using Yolcu360.EntityLayer.Entities;
 
 namespace Yolcu360.BusinessLayer.Concrete
 {
-    /// <summary>
-    /// Simülasyon kiralama iş mantığı. Gün sayısı / ek hizmet / genel toplam hesaplar, benzersiz
-    /// simülasyon kodu üretir ve kaydı saklar. Gerçek rezervasyon/ödeme YAPMAZ.
-    ///
-    /// GÜVENLİK: Kişisel sürücü bilgileri (TC, telefon, e-posta vb.) loga AÇIK YAZILMAZ.
-    /// </summary>
-    public class SimulatedRentalManager : ISimulatedRentalService
+    public class RentalSimulationManager : IRentalSimulationService
     {
         private readonly ISimulatedRentalRepository _repository;
 
-        public SimulatedRentalManager(ISimulatedRentalRepository repository)
+        public RentalSimulationManager(ISimulatedRentalRepository repository)
         {
             _repository = repository;
         }
@@ -26,7 +20,6 @@ namespace Yolcu360.BusinessLayer.Concrete
             if (dto == null) throw new ArgumentNullException(nameof(dto));
             LogHelper.Info("Kiralama simülasyonu başlatıldı (araç bilgisi alındı).");
 
-            // Hesaplamalar (UI ile aynı kuralları kullanır).
             var days = SimulationCalculator.RentalDays(dto.PickupDateTime, dto.ReturnDateTime);
             var extrasTotal = SimulationCalculator.ExtrasTotal(dto.Extras);
             var grandTotal = SimulationCalculator.GrandTotal(dto.BasePrice, extrasTotal);
@@ -121,7 +114,6 @@ namespace Yolcu360.BusinessLayer.Concrete
             LogHelper.Info($"Simülasyon silindi (Id={id}).");
         }
 
-        /// <summary>Y360-SIM-YYYYMMDD-#### biçiminde benzersiz simülasyon kodu üretir (o günün sırasıyla).</summary>
         private async Task<string> GenerateCodeAsync(DateTime when, CancellationToken ct)
         {
             int seq;

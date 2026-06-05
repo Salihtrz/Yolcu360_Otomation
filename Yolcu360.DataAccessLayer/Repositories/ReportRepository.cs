@@ -37,7 +37,6 @@ VALUES
  @Price,@Currency,@PickupLocation,@PickupDateTime,@ReturnDateTime,
  @SourceUrl,@ImageUrl,@ScrapedAt);";
 
-                    // Dapper, IEnumerable verildiğinde komutu her eleman için çalıştırır.
                     await conn.ExecuteAsync(new CommandDefinition(carSql, carList, tx, cancellationToken: ct));
                 }
 

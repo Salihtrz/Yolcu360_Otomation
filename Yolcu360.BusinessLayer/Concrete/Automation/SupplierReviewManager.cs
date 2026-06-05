@@ -1,3 +1,6 @@
+using Yolcu360.BusinessLayer.Abstract.Automation;
+using Yolcu360.BusinessLayer.Abstract.Browser;
+using Yolcu360.Common.Automation;
 using Newtonsoft.Json.Linq;
 using Yolcu360.BusinessLayer.Abstract;
 using Yolcu360.Common.Constants;
@@ -6,7 +9,7 @@ using Yolcu360.Common.Logging;
 using Yolcu360.DtoLayer.CarResultDto;
 using Yolcu360.DtoLayer.ReviewDto;
 
-namespace Yolcu360.BusinessLayer.Concrete
+namespace Yolcu360.BusinessLayer.Concrete.Automation
 {
     /// <summary>
     /// CefSharp üzerinden firma değerlendirme modalını açıp okuyan servis. Akış:

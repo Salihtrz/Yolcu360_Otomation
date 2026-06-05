@@ -1,10 +1,13 @@
+using Yolcu360.BusinessLayer.Abstract.Automation;
+using Yolcu360.BusinessLayer.Abstract.Browser;
+using Yolcu360.Common.Automation;
 using Yolcu360.BusinessLayer.Abstract;
 using Yolcu360.BusinessLayer.Helpers;
 using Yolcu360.Common.Constants;
 using Yolcu360.Common.Helpers;
 using Yolcu360.Common.Logging;
 
-namespace Yolcu360.BusinessLayer.Concrete
+namespace Yolcu360.BusinessLayer.Concrete.Automation
 {
     public class LoginAutomationManager : ILoginAutomationService
     {

@@ -7,10 +7,6 @@ using Yolcu360.EntityLayer.Entities;
 
 namespace Yolcu360.BusinessLayer.Concrete
 {
-    /// <summary>
-    /// Yerel uygulama kullanıcısı işlemleri. NOT: Bu okul projesinde şifreler basitlik
-    /// için düz metin saklanır; gerçek bir üründe mutlaka hash'lenmelidir.
-    /// </summary>
     public class UserManager : IUserService
     {
         private readonly IUserRepository _userRepository;
@@ -26,7 +22,6 @@ namespace Yolcu360.BusinessLayer.Concrete
             var password = dto?.Password ?? string.Empty;
             var phone = (dto?.PhoneNumber ?? string.Empty).Trim();
 
-            // Doğrulamalar (kullanıcıya gösterilebilir mesajlar).
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
                 throw new AuthenticationException("E-posta veya şifre boş olamaz.");
             if (!email.Contains('@') || email.Length < 5)
@@ -54,7 +49,7 @@ namespace Yolcu360.BusinessLayer.Concrete
             var user = new User
             {
                 Email = email,
-                Password = PasswordHasher.Hash(password), // şifre HASH'lenerek saklanır (düz metin değil)
+                Password = PasswordHasher.Hash(password),
                 PhoneNumber = phone,
                 CreatedAt = DateTime.Now
             };
@@ -73,28 +68,17 @@ namespace Yolcu360.BusinessLayer.Concrete
 
         public Task<User> GetUserByEmailAsync(string email, CancellationToken ct = default)
             => _userRepository.GetByEmailAsync((email ?? string.Empty).Trim(), ct);
-
-        // Hash-only politikası: şifreler PBKDF2 ile hash'lenerek saklanır. Saklanan değer geçerli bir
-        // hash değilse (ör. eski düz metin kayıt) doğrulama başarısız olur ve kullanıcı yeniden kayıt
-        // olmalıdır. Karşılaştırma sabit-zamanlıdır (bkz. PasswordHasher).
         public bool ValidatePassword(string inputPassword, string storedPasswordOrHash)
             => PasswordHasher.Verify(inputPassword, storedPasswordOrHash);
 
-        /// <summary>
-        /// E-posta/şifre ile uygulama girişi. Adımlar: boş alan kontrolü → DB'den kullanıcı →
-        /// şifre kontrolü → telefon numarası kontrolü → AuthenticatedUserDto. Telefon numarası
-        /// loglanması gerekirse MASKELİ loglanır; şifre/OTP asla loglanmaz.
-        /// </summary>
         public async Task<AuthenticatedUserDto> LoginAsync(LoginUserDto dto, CancellationToken ct = default)
         {
             var email = (dto?.Email ?? string.Empty).Trim();
             var password = dto?.Password ?? string.Empty;
 
-            // 1) Boş alan kontrolü.
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
                 throw new AuthenticationException("E-posta veya şifre boş olamaz.");
 
-            // 2) Kullanıcıyı DB'den bul. Veritabanına erişilemezse anlamlı mesaj ver.
             User user;
             try
             {
@@ -107,20 +91,16 @@ namespace Yolcu360.BusinessLayer.Concrete
                 throw new AuthenticationException("Veritabanı bağlantısı kurulamadı.");
             }
 
-            // 3) Kullanıcı var mı?
             if (user == null)
                 throw new AuthenticationException("Kullanıcı bulunamadı.");
 
-            // 4) Şifre doğru mu?
             if (!ValidatePassword(password, user.Password))
                 throw new AuthenticationException("Şifre hatalı.");
 
-            // 5) Bu hesaba bağlı Yolcu360 telefon numarası var mı?
             var phone = (user.PhoneNumber ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(phone))
                 throw new AuthenticationException("Bu kullanıcıya ait telefon numarası bulunamadı.");
 
-            // 6) Başarılı. Telefon numarası yalnızca MASKELİ loglanır.
             LogHelper.Info($"Uygulama girişi başarılı: {email} (Id={user.Id}, Tel={PhoneMaskHelper.Mask(phone)}).");
             return new AuthenticatedUserDto
             {
@@ -155,7 +135,6 @@ namespace Yolcu360.BusinessLayer.Concrete
                 return;
             }
 
-            // Hiç kullanıcı yoksa, telefon numarasını saklamak için minimal yerel kullanıcı.
             var created = new User
             {
                 Email = "local-user@yolcu360.app",
@@ -186,9 +165,8 @@ namespace Yolcu360.BusinessLayer.Concrete
 
             var users = await _userRepository.GetAllAsync(ct);
             if (users.Any(u => string.Equals((u.PhoneNumber ?? string.Empty).Trim(), phoneNumber, StringComparison.Ordinal)))
-                return; // zaten kayıtlı
+                return;
 
-            // Telefonu boş olan bir kullanıcı varsa onu kullan; yoksa numara için minimal kullanıcı ekle.
             var emptyUser = users.FirstOrDefault(u => string.IsNullOrWhiteSpace(u.PhoneNumber));
             if (emptyUser != null)
             {

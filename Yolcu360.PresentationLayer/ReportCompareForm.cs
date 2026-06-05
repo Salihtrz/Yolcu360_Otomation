@@ -7,10 +7,6 @@ using Guna.UI2.WinForms;
 
 namespace Yolcu360.PresentationLayer
 {
-    /// <summary>
-    /// İki geçmiş raporu yan yana karşılaştırır: rapor özetleri (adet, min/ort/max fiyat) ve
-    /// ortak araç modellerinin fiyat farkları.
-    /// </summary>
     public class ReportCompareForm : Form
     {
         private readonly IReportService _reportService;

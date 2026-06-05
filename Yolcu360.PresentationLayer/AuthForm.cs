@@ -1,3 +1,5 @@
+using Yolcu360.BusinessLayer.Concrete.Automation;
+using Yolcu360.Common.Automation;
 using Guna.UI2.WinForms;
 using Yolcu360.BusinessLayer;
 using Yolcu360.BusinessLayer.Concrete;
@@ -181,12 +183,12 @@ namespace Yolcu360.PresentationLayer
             _loginPanel.Controls.Add(MakeFieldLabel("Şifre", 28, 80));
             _txtPassword = MakeInput(28, 104);
             _txtPassword.UseSystemPasswordChar = true;
-            _txtPassword.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; OnLoginClick(s, e); } };
+            _txtPassword.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; btnLogin_Click(s, e); } };
             _loginPanel.Controls.Add(_txtPassword);
 
             _btnLogin = UiStyleHelper.Button("Giriş Yap", ButtonVariant.Primary, 364, 42);
             _btnLogin.Location = new Point(28, 164);
-            _btnLogin.Click += OnLoginClick;
+            _btnLogin.Click += btnLogin_Click;
             _loginPanel.Controls.Add(_btnLogin);
 
             var lnk = MakeLink("Hesabın yok mu? Kayıt Ol", 28, 220);
@@ -214,7 +216,7 @@ namespace Yolcu360.PresentationLayer
 
             _btnRegister = UiStyleHelper.Button("Kayıt Ol", ButtonVariant.Success, 364, 42);
             _btnRegister.Location = new Point(28, 224);
-            _btnRegister.Click += OnRegisterClick;
+            _btnRegister.Click += btnRegister_Click;
             _registerPanel.Controls.Add(_btnRegister);
 
             var lnk = MakeLink("Zaten hesabın var mı? Giriş Yap", 28, 280);
@@ -331,7 +333,7 @@ namespace Yolcu360.PresentationLayer
 
         // ----------------------------------------------------------------- Register
 
-        private async void OnRegisterClick(object sender, EventArgs e)
+        private async void btnRegister_Click(object sender, EventArgs e)
         {
             var dto = new RegisterUserDto
             {
@@ -365,7 +367,7 @@ namespace Yolcu360.PresentationLayer
 
         // ----------------------------------------------------------------- Login
 
-        private async void OnLoginClick(object sender, EventArgs e)
+        private async void btnLogin_Click(object sender, EventArgs e)
         {
             var dto = new LoginUserDto
             {
@@ -390,14 +392,16 @@ namespace Yolcu360.PresentationLayer
 
                 _services.CurrentUser = authUser;
 
-                // 2) Yolcu360 SMS akışı başlasın — bu sırada YÜKLENİYOR paneli ekranı kaplar.
-                ShowLoading("Uygulama girişi başarılı.\nYolcu360 SMS doğrulaması başlatılıyor...");
-                await StartYolcu360LoginAsync(authUser.PhoneNumber);
+                // 2) Yolcu360 SMS akışı başlasın. Tarayıcı GÖRÜNÜR yapılır ki kullanıcı numaranın
+                //    otomatik yazıldığını, "Devam Et"in tıklandığını ve SMS kodunun girildiğini
+                //    CANLI görebilsin. Üstte ne yapıldığını anlatan bir durum şeridi gösterilir.
+                ShowBrowserStage("Uygulama girişi başarılı. Yolcu360 açılıyor, bilgiler otomatik dolduruluyor...");
+                await StartSmsLoginAsync(authUser.PhoneNumber);
             }
-            catch (OperationCanceledException) { HideLoading(); SetAuthStatus("İşlem iptal edildi.", ThemeColors.Warning); }
+            catch (OperationCanceledException) { ShowAuthCard(); SetAuthStatus("İşlem iptal edildi.", ThemeColors.Warning); }
             catch (Exception ex)
             {
-                HideLoading();
+                ShowAuthCard();
                 LogHelper.Error("Giriş hatası.", ex);
                 SetAuthStatus("Giriş sırasında bir hata oluştu.", ThemeColors.Danger);
             }
@@ -409,7 +413,7 @@ namespace Yolcu360.PresentationLayer
         /// ve giriş poller'ı korunur. Otomatik "Devam Et" adımı engellenirse (AutomationException),
         /// WebView2 öne çıkarılıp kullanıcıya elle tamamlatılır; OTP yine otomatik girilir.
         /// </summary>
-        private async Task StartYolcu360LoginAsync(string phoneNumber)
+        private async Task StartSmsLoginAsync(string phoneNumber)
         {
             _cts = new CancellationTokenSource();
             _otpSubmitStarted = false;
@@ -423,27 +427,23 @@ namespace Yolcu360.PresentationLayer
             }
             StartLoginPoller();
 
-            // Zaten Yolcu360 oturumu açıksa (login → ana sayfaya yönlendiriyorsa) doğrudan köprüle.
-            await Task.Delay(2500);
-            if (_loginDetected) return;
-            if (!IsOnLoginPage())
-            {
-                SetLoadingStatus("Yolcu360 oturumu zaten açık.\nOturum uygulamaya aktarılıyor...");
-                await BridgeAndFinishAsync();
-                return;
-            }
-
+            // StartPhoneLoginAsync /login'e TAZE gider (kendi içinde), telefon alanını bulur, numarayı
+            // yazar ve "Devam Et"e tıklar — tarayıcı görünür olduğu için kullanıcı izler. Kullanıcı
+            // Yolcu360'a ZATEN girişliyse /login ana sayfaya yönlenir; bunu giriş poller'ı algılayıp
+            // doğrudan köprüler. NOT: Burada AYRI bir ön-navigasyon YAPMIYORUZ — aynı /login'e art arda
+            // iki gidiş WebView2'de NavigationCompleted'ı tetiklemeyip beklemeyi kilitliyordu.
             try
             {
                 await _services.LoginAutomationService.StartPhoneLoginAsync(phoneNumber, _progress, _cts.Token);
-                SetLoadingStatus(
-                    "SMS kodu bekleniyor...\nKod telefonunuza gelince otomatik girilecek.\n\n" +
-                    BuildListeningHint());
+                if (!_loginDetected)
+                    SetLoadingStatus("SMS kodu bekleniyor... Kod gelince otomatik girilecek.\n" + BuildListeningHint());
             }
+            catch (OperationCanceledException) { /* form kapandı/iptal (poller köprülemiş olabilir) */ }
             catch (AutomationException ax)
             {
-                // Otomatik "Devam Et" engellendi → tarayıcıyı öne çıkar, kullanıcı elle bassın.
-                EnterManualMode(ax.Message);
+                // Telefon alanı bulunamadı VEYA otomatik "Devam Et" engellendi. Poller bu sırada
+                // köprülediyse (zaten girişli) sorun yok; değilse kullanıcı elle devam etsin.
+                if (!_loginDetected) EnterManualMode(ax.Message);
             }
         }
 
@@ -453,7 +453,7 @@ namespace Yolcu360.PresentationLayer
             if (_otpSubmitStarted || _loginDetected) return;
 
             _otpSubmitStarted = true;
-            ShowLoading("SMS kodu otomatik giriliyor...");
+            ShowBrowserStage("SMS kodu otomatik giriliyor..."); // tarayıcı görünür kalsın, kodun yazıldığını gör
             try
             {
                 var token = _cts?.Token ?? CancellationToken.None;
@@ -489,26 +489,6 @@ namespace Yolcu360.PresentationLayer
             }
         }
 
-        private async Task<bool> VerifyCefLoggedInAsync()
-        {
-            // Apex (https://yolcu360.com) origin'inde doğrula: token oraya yazıldı ve giriş sonrası
-            // kanonik origin burası. Girişliyse /login ana sayfaya yönlenir.
-            try
-            {
-                await _services.BrowserService.LoadUrlAsync(SiteOrigins[0] + "/login");
-                await Task.Delay(2500);
-                for (int i = 0; i < 12; i++)
-                {
-                    var url = (_services.BrowserService.CurrentUrl ?? string.Empty).ToLowerInvariant();
-                    if (url.Contains("yolcu360.com") && !url.Contains("/login"))
-                        return true;
-                    await Task.Delay(500);
-                }
-            }
-            catch (Exception ex) { LogHelper.Warning("Giriş doğrulaması yapılamadı: " + ex.Message); }
-            return false;
-        }
-
         private bool IsOnLoginPage()
         {
             var url = _services.LoginBrowserService.CurrentUrl ?? string.Empty;
@@ -522,8 +502,9 @@ namespace Yolcu360.PresentationLayer
             try { _loginPollTimer?.Stop(); } catch { }
             try { _services.OtpReceiverService.Stop(); } catch { }
 
-            ShowLoading("Oturum uygulamaya aktarılıyor...");
-            bool loggedIn = false;
+            // Köprüleme (~10-15 sn) ARKA PLANDA yapılır: WebView2 ana sayfasını gizle, ekranı kaplayan
+            // "Oturum aktarılıyor..." + progress bar panelini göster. Böylece ana sayfa boş yere açık kalmaz.
+            ShowLoadingOverlay("Oturum aktarılıyor...");
             try
             {
                 await WaitForLoginBrowserSessionAsync();
@@ -559,25 +540,19 @@ namespace Yolcu360.PresentationLayer
                 await _services.BrowserService.LoadUrlAsync(Yolcu360Constants.HomeUrl);
                 await Task.Delay(2500); // SPA token'ı okuyup girişli render etsin
                 LogHelper.Info($"{cookies.Count} çerez + localStorage (apex+www) CefSharp'a köprülendi.");
-
-                loggedIn = await VerifyCefLoggedInAsync();
-                await _services.BrowserService.LoadUrlAsync(Yolcu360Constants.HomeUrl);
+                // Otomasyon tarayıcısı ana sayfada (girişli) kalır; arama buradan devam eder. Ayrı bir
+                // /login DOĞRULAMA adımı YAPILMIYOR — yalnızca bilgi amaçlıydı ve giriş penceresini ~8 sn
+                // fazladan açık tutuyordu. Çerez + localStorage köprülendi; bu yeterli.
             }
             catch (Exception ex)
             {
-                LogHelper.Warning("Oturum köprüleme/doğrulama tamamlanamadı: " + ex.Message);
+                LogHelper.Warning("Oturum köprüleme tamamlanamadı: " + ex.Message);
             }
 
-            // Bu metoda ANCAK WebView2'de Yolcu360 girişi başarılı olduğunda gelinir (OTP kabul edildi
-            // veya /login'den ana sayfaya yönlenildi). Bu yüzden kullanıcı GİRİŞ YAPMIŞ sayılır ve
-            // uygulamaya alınır. CefSharp köprü DOĞRULAMASI zaman/oturum yarışı nedeniyle başarısız
-            // olabilir; bu yalnızca otomasyon tarayıcısının girişini etkiler, kullanıcıyı engellemez
-            // (eski davranış da böyleydi). Çerez + localStorage köprülendi; otomasyon gerekirse kullanır.
-            if (loggedIn)
-                LogHelper.Info("CefSharp girişli doğrulandı (oturum köprülendi).");
-            else
-                LogHelper.Warning("CefSharp girişli doğrulanamadı; WebView2 girişi başarılı olduğundan uygulamaya yine de devam ediliyor.");
-
+            // WebView2'de Yolcu360 girişi başarılı oldu ve oturum CefSharp'a köprülendi. Kullanıcı GİRİŞ
+            // YAPMIŞ sayılır; giriş (WebView2) penceresi HEMEN kapatılır ve ana uygulamaya geçilir.
+            LogHelper.Info("Giriş tamamlandı; oturum köprülendi, giriş penceresi kapatılıyor.");
+            SetLoadingStatus("Giriş başarılı. Uygulama açılıyor...");
             AuthSucceeded = true;
             if (!IsDisposed) BeginInvoke(new Action(() => { DialogResult = DialogResult.OK; Close(); }));
         }
@@ -632,38 +607,57 @@ namespace Yolcu360.PresentationLayer
         /// devam ettiği için kod geldiğinde yine otomatik girilir ve giriş tamamlanır.
         /// </summary>
         private void EnterManualMode(string message)
-        {
-            UiHelper.RunOnUi(this, () =>
-            {
-                _loadingPanel.Visible = false;
-                _authPanel.Visible = false;
-                _manualBar.Visible = true;
-                _lblManual.Text = message;
-                _browserLayer.BringToFront();
-                _manualBar.BringToFront();
-                try { _services.LoginBrowserService.SetBrowserVisible(true); } catch { }
-            });
-        }
+            => ShowBrowserStage(message, warn: true);
 
         // ----------------------------------------------------------------- Status / busy helpers
 
-        private void ShowLoading(string text) => UiHelper.RunOnUi(this, () =>
+        /// <summary>
+        /// WebView2'yi ÖNE çıkarır (görünür yapar) ve üstte bir durum şeridi gösterir. Yolcu360 SMS
+        /// akışı boyunca kullanılır: kullanıcı numaranın yazıldığını, "Devam Et"in tıklandığını ve
+        /// kodun girildiğini canlı görür. <paramref name="warn"/>=true ise şerit uyarı rengindedir
+        /// (otomatik adım engellendi, elle devam et).
+        /// </summary>
+        private void ShowBrowserStage(string status, bool warn = false) => UiHelper.RunOnUi(this, () =>
+        {
+            _loadingPanel.Visible = false;
+            _authPanel.Visible = false;
+            _manualBar.BackColor = warn ? ThemeColors.Warning : ThemeColors.Primary;
+            _lblManual.Text = status;
+            _manualBar.Visible = true;
+            _browserLayer.BringToFront();
+            _manualBar.BringToFront();
+            try { _services.LoginBrowserService.SetBrowserVisible(true); } catch { }
+        });
+
+        /// <summary>Giriş/kayıt kartını geri gösterir (tarayıcı sahnesini ve yükleniyor panelini gizler).</summary>
+        private void ShowAuthCard() => UiHelper.RunOnUi(this, () =>
+        {
+            _loadingPanel.Visible = false;
+            _manualBar.Visible = false;
+            _authPanel.Visible = true;
+            _authPanel.BringToFront();
+            CenterCard();
+        });
+
+        /// <summary>
+        /// Tarayıcıyı GİZLEYİP (ana sayfa görünmesin) ekranı kaplayan yükleniyor panelini gösterir:
+        /// "Oturum aktarılıyor..." metni + marquee progress bar. Çerez/localStorage köprülemesi bu
+        /// panel altında (arka planda) yapılır.
+        /// </summary>
+        private void ShowLoadingOverlay(string text) => UiHelper.RunOnUi(this, () =>
         {
             _manualBar.Visible = false;
-            _authPanel.Visible = true; // arka plan opak kalsın (WebView2 görünmesin)
             _lblLoadingStatus.Text = text;
             _loadingPanel.Visible = true;
             _loadingPanel.BringToFront();
         });
 
-        private void HideLoading() => UiHelper.RunOnUi(this, () =>
+        // Durum metni: hem yükleniyor panelini hem tarayıcı şeridini günceller (hangisi görünürse).
+        private void SetLoadingStatus(string text) => UiHelper.RunOnUi(this, () =>
         {
-            _loadingPanel.Visible = false;
-            _authPanel.Visible = true;
-            _authPanel.BringToFront();
+            _lblLoadingStatus.Text = text;
+            _lblManual.Text = text;
         });
-
-        private void SetLoadingStatus(string text) => UiHelper.RunOnUi(this, () => _lblLoadingStatus.Text = text);
 
         private void SetAuthStatus(string text, Color color) => UiHelper.RunOnUi(this, () =>
         {

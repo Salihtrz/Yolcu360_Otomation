@@ -1,4 +1,4 @@
-namespace Yolcu360.Common.Constants
+namespace Yolcu360.Common.Automation
 {
     /// <summary>
     /// Yolcu360 telefon + SMS/OTP giriş akışı için DOM selector'ları.

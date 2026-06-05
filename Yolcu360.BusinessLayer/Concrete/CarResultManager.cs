@@ -4,9 +4,6 @@ using Yolcu360.EntityLayer.Entities;
 
 namespace Yolcu360.BusinessLayer.Concrete
 {
-    /// <summary>
-    /// Araç sonuçları için DTO &lt;-&gt; Entity dönüşümlerini yapar.
-    /// </summary>
     public class CarResultManager : ICarResultService
     {
         public List<CarResult> ToEntities(List<ResultCarDto> dtos)

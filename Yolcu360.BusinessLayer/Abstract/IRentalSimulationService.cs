@@ -6,7 +6,7 @@ namespace Yolcu360.BusinessLayer.Abstract
     /// Araç kiralama SİMÜLASYONU iş mantığı. Gerçek rezervasyon/ödeme YAPMAZ; yalnızca uygulama
     /// içinde simüle edilmiş kiralama kayıtları üretir, hesaplar, listeler ve siler.
     /// </summary>
-    public interface ISimulatedRentalService
+    public interface IRentalSimulationService
     {
         /// <summary>
         /// Girdilerden gün sayısı, ek hizmet toplamı, genel toplam ve simülasyon kodunu hesaplar,
