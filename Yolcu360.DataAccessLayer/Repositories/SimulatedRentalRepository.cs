@@ -11,7 +11,7 @@ namespace Yolcu360.DataAccessLayer.Repositories
         public SimulatedRentalRepository(MySqlConnectionFactory factory)
             : base(factory, "SimulatedRentals") { }
 
-        public async Task<int> CreateWithExtrasAsync(
+        public async Task<int> CreateRentalWithExtrasAsync(
             SimulatedRental rental, IEnumerable<SimulatedRentalExtra> extras, CancellationToken ct = default)
         {
             await using var conn = await Factory.CreateOpenConnectionAsync(ct);
@@ -42,7 +42,7 @@ VALUES (@SimulatedRentalId,@ExtraName,@ExtraPrice);";
             }
         }
 
-        public async Task<SimulatedRental> GetWithExtrasAsync(int id, CancellationToken ct = default)
+        public async Task<SimulatedRental> GetRentalWithExtrasAsync(int id, CancellationToken ct = default)
         {
             await using var conn = await Factory.CreateOpenConnectionAsync(ct);
 
@@ -60,7 +60,7 @@ VALUES (@SimulatedRentalId,@ExtraName,@ExtraPrice);";
             return rental;
         }
 
-        public async Task<int> CountByDateAsync(DateTime date, CancellationToken ct = default)
+        public async Task<int> RentalCountByDateAsync(DateTime date, CancellationToken ct = default)
         {
             await using var conn = await Factory.CreateOpenConnectionAsync(ct);
             return await conn.ExecuteScalarAsync<int>(

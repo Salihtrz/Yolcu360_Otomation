@@ -92,7 +92,7 @@ namespace Yolcu360.PresentationLayer.Forms
         {
             try
             {
-                var rows = await _service.GetAllAsync();
+                var rows = await _service.GetAllRentalAsync();
                 _grid.DataSource = null;
                 _grid.DataSource = rows;
                 _lblInfo.Text = $"{rows.Count} simülasyon kaydı. Çift tıkla = detay.";
@@ -111,7 +111,7 @@ namespace Yolcu360.PresentationLayer.Forms
             if (row == null) { UiHelper.Warn("Lütfen bir kayıt seçin."); return; }
             try
             {
-                var full = await _service.GetWithExtrasAsync(row.Id) ?? row;
+                var full = await _service.GetRentalWithExtrasAsync(row.Id) ?? row;
                 var extras = full.Extras.Count == 0 ? "  - Yok" :
                     string.Join("\n", full.Extras.Select(e => $"  • {e.ExtraName}: {e.ExtraPrice:N2} TL"));
                 UiHelper.Info(
@@ -142,7 +142,7 @@ namespace Yolcu360.PresentationLayer.Forms
             if (row == null) { UiHelper.Warn("Lütfen PNG için bir kayıt seçin."); return; }
             try
             {
-                var full = await _service.GetWithExtrasAsync(row.Id) ?? row;
+                var full = await _service.GetRentalWithExtrasAsync(row.Id) ?? row;
                 using var dlg = new SaveFileDialog { Filter = "PNG (*.png)|*.png", FileName = $"{full.SimulationCode}.png" };
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 await _pngService.ExportAsync(dlg.FileName, ToSummary(full));
@@ -162,7 +162,7 @@ namespace Yolcu360.PresentationLayer.Forms
                 return;
             try
             {
-                await _service.DeleteAsync(row.Id);
+                await _service.DeleteRentalAsync(row.Id);
                 UiHelper.Info("Simülasyon silindi.");
                 await LoadAsync();
             }

@@ -11,7 +11,7 @@ namespace Yolcu360.DataAccessLayer.Repositories
         public CarResultRepository(MySqlConnectionFactory factory)
             : base(factory, "CarResults") { }
 
-        public async Task<List<CarResult>> GetByReportIdAsync(int reportId, CancellationToken ct = default)
+        public async Task<List<CarResult>> GetNameByReportIdAsync(int reportId, CancellationToken ct = default)
         {
             await using var conn = await Factory.CreateOpenConnectionAsync(ct);
             var rows = await conn.QueryAsync<CarResult>(
@@ -21,7 +21,7 @@ namespace Yolcu360.DataAccessLayer.Repositories
             return rows.ToList();
         }
 
-        public async Task<Dictionary<int, int>> GetCountsByReportAsync(CancellationToken ct = default)
+        public async Task<Dictionary<int, int>> GetCarCountsByReportAsync(CancellationToken ct = default)
         {
             await using var conn = await Factory.CreateOpenConnectionAsync(ct);
             var rows = await conn.QueryAsync(

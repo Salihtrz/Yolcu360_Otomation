@@ -38,7 +38,7 @@ namespace Yolcu360.PresentationLayer
             _cmbA = UiStyleHelper.Combo(280);
             _cmbB = UiStyleHelper.Combo(280);
             _btnCompare = UiStyleHelper.Button("Karşılaştır", ButtonVariant.Primary, 120, 32);
-            _btnCompare.Click += async (s, e) => await CompareAsync();
+            _btnCompare.Click += async (s, e) => await CompareReportsAsync();
             selFlow.Controls.Add(new Label { Text = "Rapor A:", AutoSize = true, ForeColor = ThemeColors.TextMuted, Margin = new Padding(0, 6, 4, 0) });
             selFlow.Controls.Add(_cmbA);
             selFlow.Controls.Add(new Label { Text = "Rapor B:", AutoSize = true, ForeColor = ThemeColors.TextMuted, Margin = new Padding(14, 6, 4, 0) });
@@ -105,7 +105,7 @@ namespace Yolcu360.PresentationLayer
             }
         }
 
-        private async Task CompareAsync()
+        private async Task CompareReportsAsync()
         {
             if (_cmbA.SelectedItem is not ResultReportDto a || _cmbB.SelectedItem is not ResultReportDto b)
             {
@@ -140,14 +140,14 @@ namespace Yolcu360.PresentationLayer
                 _btnCompare.Enabled = true;
             }
         }
-
+        //Raporun fiyat özetini metne çevirir.
         private static string Summary(List<ResultCarDto> cars)
         {
             var priced = cars.Where(c => c.Price > 0).ToList();
             if (priced.Count == 0) return $"{cars.Count} araç (fiyat yok)";
             return $"{cars.Count} araç | min {priced.Min(c => c.Price):N0} | ort {priced.Average(c => c.Price):N0} | max {priced.Max(c => c.Price):N0}";
         }
-
+        //İki raporun ortalama fiyat farkını hesaplar.
         private static decimal AvgDiff(List<ResultCarDto> a, List<ResultCarDto> b)
         {
             var pa = a.Where(c => c.Price > 0).Select(c => c.Price).DefaultIfEmpty(0).Average();
