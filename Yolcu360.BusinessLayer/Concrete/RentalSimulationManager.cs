@@ -15,7 +15,7 @@ namespace Yolcu360.BusinessLayer.Concrete
             _repository = repository;
         }
 
-        public async Task<RentalSimulationSummaryDto> CreateAsync(CreateSimulatedRentalDto dto, CancellationToken ct = default)
+        public async Task<RentalSimulationSummaryDto> CreateRentalAsync(CreateSimulatedRentalDto dto, CancellationToken ct = default)
         {
             if (dto == null) throw new ArgumentNullException(nameof(dto));
             LogHelper.Info("Kiralama simülasyonu başlatıldı (araç bilgisi alındı).");
@@ -26,7 +26,7 @@ namespace Yolcu360.BusinessLayer.Concrete
             LogHelper.Info($"Ek hizmetler hesaplandı ({dto.Extras?.Count ?? 0} adet, toplam {extrasTotal:N2}).");
 
             var now = DateTime.Now;
-            var code = await GenerateCodeAsync(now, ct);
+            var code = await GenerateRentalCodeAsync(now, ct);
 
             var entity = new SimulatedRental
             {
@@ -61,7 +61,7 @@ namespace Yolcu360.BusinessLayer.Concrete
                 .Select(e => new SimulatedRentalExtra { ExtraName = e.ExtraName, ExtraPrice = e.ExtraPrice })
                 .ToList();
 
-            var id = await _repository.CreateWithExtrasAsync(entity, extras, ct);
+            var id = await _repository.CreateRentalWithExtrasAsync(entity, extras, ct);
             LogHelper.Info($"Simülasyon tamamlandı ve DB'ye kaydedildi (Id={id}, kod={code}, araç='{dto.CarModel}', genel toplam={grandTotal:N2}).");
 
             return new RentalSimulationSummaryDto
@@ -87,7 +87,7 @@ namespace Yolcu360.BusinessLayer.Concrete
             };
         }
 
-        public async Task<List<ResultSimulatedRentalDto>> GetAllAsync(CancellationToken ct = default)
+        public async Task<List<ResultSimulatedRentalDto>> GetAllRentalAsync(CancellationToken ct = default)
         {
             var rows = await _repository.GetAllAsync(ct);
             return rows
@@ -96,28 +96,28 @@ namespace Yolcu360.BusinessLayer.Concrete
                 .ToList();
         }
 
-        public async Task<ResultSimulatedRentalDto> GetByIdAsync(int id, CancellationToken ct = default)
+        public async Task<ResultSimulatedRentalDto> GetByIdRentalAsync(int id, CancellationToken ct = default)
         {
             var entity = await _repository.GetByIdAsync(id, ct);
             return entity == null ? null : MapToDto(entity);
         }
 
-        public async Task<ResultSimulatedRentalDto> GetWithExtrasAsync(int id, CancellationToken ct = default)
+        public async Task<ResultSimulatedRentalDto> GetRentalWithExtrasAsync(int id, CancellationToken ct = default)
         {
-            var entity = await _repository.GetWithExtrasAsync(id, ct);
+            var entity = await _repository.GetRentalWithExtrasAsync(id, ct);
             return entity == null ? null : MapToDto(entity);
         }
 
-        public async Task DeleteAsync(int id, CancellationToken ct = default)
+        public async Task DeleteRentalAsync(int id, CancellationToken ct = default)
         {
             await _repository.DeleteAsync(id, ct);
             LogHelper.Info($"Simülasyon silindi (Id={id}).");
         }
 
-        private async Task<string> GenerateCodeAsync(DateTime when, CancellationToken ct)
+        private async Task<string> GenerateRentalCodeAsync(DateTime when, CancellationToken ct)
         {
             int seq;
-            try { seq = await _repository.CountByDateAsync(when, ct) + 1; }
+            try { seq = await _repository.RentalCountByDateAsync(when, ct) + 1; }
             catch { seq = 1; }
             var code = $"Y360-SIM-{when:yyyyMMdd}-{seq:D4}";
             LogHelper.Info($"Simülasyon kodu üretildi: {code}.");

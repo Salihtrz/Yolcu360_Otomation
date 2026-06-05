@@ -490,7 +490,7 @@ namespace Yolcu360.PresentationLayer.Forms
             try
             {
                 SetBusy(true);
-                CompletedSummary = await _service.CreateAsync(dto);
+                CompletedSummary = await _service.CreateRentalAsync(dto);
 
                 if (UiHelper.Confirm(
                         $"Kiralama simülasyonu tamamlandı.\nSimülasyon Kodu: {CompletedSummary.SimulationCode}\n\nSimülasyon özetini PNG olarak kaydetmek ister misiniz?",

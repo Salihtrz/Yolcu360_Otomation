@@ -50,7 +50,7 @@ VALUES
             }
         }
 
-        public async Task<Report> GetByNameAsync(string reportName, CancellationToken ct = default)
+        public async Task<Report> GetReportByNameAsync(string reportName, CancellationToken ct = default)
         {
             await using var conn = await Factory.CreateOpenConnectionAsync(ct);
             return await conn.QueryFirstOrDefaultAsync<Report>(

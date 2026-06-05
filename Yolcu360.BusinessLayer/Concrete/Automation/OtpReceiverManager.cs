@@ -15,7 +15,7 @@ using Yolcu360.DataAccessLayer.Config;
 namespace Yolcu360.BusinessLayer.Concrete.Automation
 {
     /// <summary>
-    /// Telefondaki MacroDroid'in gönderdiği 6 haneli OTP kodunu yerel ağ üzerinden alır.
+    /// Telefondaki MacroDroid'in gönderdiği 6 haneli OTP(One-Time password) kodunu yerel ağ üzerinden alır.
     ///
     /// Önce <see cref="HttpListener"/> denenir; yönetici/URL ACL gerektirip başlatılamazsa
     /// yönetici gerektirmeyen <see cref="TcpListener"/>'a düşülür (telefon aynı Wi-Fi'dan

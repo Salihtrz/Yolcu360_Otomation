@@ -11,6 +11,6 @@ namespace Yolcu360.DataAccessLayer.Abstract
         Task<int> CreateReportWithCarsAsync(Report report, IEnumerable<CarResult> cars, CancellationToken ct = default);
 
         /// <summary>Aynı isimde rapor var mı kontrolü için; yoksa null döner.</summary>
-        Task<Report> GetByNameAsync(string reportName, CancellationToken ct = default);
+        Task<Report> GetReportByNameAsync(string reportName, CancellationToken ct = default);
     }
 }

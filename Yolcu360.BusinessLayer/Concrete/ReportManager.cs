@@ -42,7 +42,7 @@ namespace Yolcu360.BusinessLayer.Concrete
 
         public async Task<int> OverwriteReportAsync(string reportName, CreateReportDto dto, CancellationToken ct = default)
         {
-            var existing = await _reportRepository.GetByNameAsync(reportName, ct);
+            var existing = await _reportRepository.GetReportByNameAsync(reportName, ct);
             if (existing != null)
             {
                 await _reportRepository.DeleteAsync(existing.Id, ct);
@@ -53,14 +53,14 @@ namespace Yolcu360.BusinessLayer.Concrete
 
         public async Task<bool> ReportNameExistsAsync(string reportName, CancellationToken ct = default)
         {
-            var existing = await _reportRepository.GetByNameAsync(reportName, ct);
+            var existing = await _reportRepository.GetReportByNameAsync(reportName, ct);
             return existing != null;
         }
 
         public async Task<List<ResultReportDto>> GetAllReportsAsync(CancellationToken ct = default)
         {
             var reports = await _reportRepository.GetAllAsync(ct);
-            var counts = await _carResultRepository.GetCountsByReportAsync(ct);
+            var counts = await _carResultRepository.GetCarCountsByReportAsync(ct);
 
             return reports
                 .OrderByDescending(r => r.CreatedAt)
@@ -79,7 +79,7 @@ namespace Yolcu360.BusinessLayer.Concrete
 
         public async Task<List<ResultCarDto>> GetReportCarsAsync(int reportId, CancellationToken ct = default)
         {
-            var cars = await _carResultRepository.GetByReportIdAsync(reportId, ct);
+            var cars = await _carResultRepository.GetNameByReportIdAsync(reportId, ct);
             return _carResultService.ToDtos(cars);
         }
 
