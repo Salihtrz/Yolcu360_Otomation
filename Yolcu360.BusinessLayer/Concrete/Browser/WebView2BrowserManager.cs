@@ -1,4 +1,6 @@
-﻿using System.Windows.Forms;
+using Yolcu360.BusinessLayer.Abstract.Browser;
+using Yolcu360.Common.Automation;
+using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using Newtonsoft.Json;
@@ -8,7 +10,7 @@ using Yolcu360.Common.Helpers;
 using Yolcu360.Common.Logging;
 using Yolcu360.DtoLayer.BrowserDto;
 
-namespace Yolcu360.BusinessLayer.Concrete
+namespace Yolcu360.BusinessLayer.Concrete.Browser
 {
     /// <summary>
     /// WebView2 tabanli tarayici yoneticisi. CefSharp ile ayni servis arayuzunu uygular;
@@ -49,9 +51,9 @@ namespace Yolcu360.BusinessLayer.Concrete
             _browser.CoreWebView2.Settings.AreDevToolsEnabled = true;
             _browser.CoreWebView2.Settings.IsScriptEnabled = true;
 
-            // POPUP/YENİ PENCERE ENGELİ: site (ör. /login açılırken ana sayfayı) bir window.open ile
-            // açmaya çalışırsa ayrı pencere AÇILMASIN ve mevcut login sayfasını DEĞİŞTİRMESİN —
-            // sadece engellenir. (Aynı pencereye yönlendirmek login sayfasını ana sayfaya taşıyordu.)
+            // POPUP/YEN� PENCERE ENGEL�: site (�r. /login a��l�rken ana sayfay�) bir window.open ile
+            // a�maya �al���rsa ayr� pencere A�ILMASIN ve mevcut login sayfas�n� DE���T�RMES�N �
+            // sadece engellenir. (Ayn� pencereye y�nlendirmek login sayfas�n� ana sayfaya ta��yordu.)
             _browser.CoreWebView2.NewWindowRequested += (s, e) => { e.Handled = true; };
 
             // Navigasyon durumunu izle: WaitForPageLoadAsync, aktif yukleme yoksa hemen donebilsin
@@ -63,10 +65,10 @@ namespace Yolcu360.BusinessLayer.Concrete
                 LogHelper.Info($"Sayfa yuklendi (WebView2): {_browser.Source}");
             };
 
-            // VIEWPORT KİLİDİ: Yolcu360 responsive — DOM (ve selector'larımız) pencere genişliğiyle
-            // değişiyor. Pencere büyütülünce site masaüstü layout'una geçip selector'ları kırıyordu
-            // (ör. tarih takvimi). CDP ile sabit bir CSS viewport genişliği zorlanır; böylece pencere
-            // boyutu ne olursa olsun site HEP aynı (selector'larımızın çalıştığı) layout'u render eder.
+            // VIEWPORT K�L�D�: Yolcu360 responsive � DOM (ve selector'lar�m�z) pencere geni�li�iyle
+            // de�i�iyor. Pencere b�y�t�l�nce site masa�st� layout'una ge�ip selector'lar� k�r�yordu
+            // (�r. tarih takvimi). CDP ile sabit bir CSS viewport geni�li�i zorlan�r; b�ylece pencere
+            // boyutu ne olursa olsun site HEP ayn� (selector'lar�m�z�n �al��t���) layout'u render eder.
             await ApplyViewportLockAsync();
 
             IsInitialized = true;
@@ -75,9 +77,9 @@ namespace Yolcu360.BusinessLayer.Concrete
         }
 
         /// <summary>
-        /// CDP Emulation.setDeviceMetricsOverride ile sabit bir CSS viewport zorlar (genişlik 820 =
-        /// tablet aralığı: site, selector'larımızın doğrulandığı layout'u render eder). Pencere
-        /// büyütülse/küçültülse bile site DOM'u değişmez. Best-effort: hata olursa yalnızca loglanır.
+        /// CDP Emulation.setDeviceMetricsOverride ile sabit bir CSS viewport zorlar (geni�lik 820 =
+        /// tablet aral���: site, selector'lar�m�z�n do�ruland��� layout'u render eder). Pencere
+        /// b�y�t�lse/k���lt�lse bile site DOM'u de�i�mez. Best-effort: hata olursa yaln�zca loglan�r.
         /// </summary>
         private async Task ApplyViewportLockAsync()
         {
@@ -89,17 +91,21 @@ namespace Yolcu360.BusinessLayer.Concrete
             }
             catch (Exception ex)
             {
-                LogHelper.Warning("Viewport kilidi uygulanamadı: " + ex.Message);
+                LogHelper.Warning("Viewport kilidi uygulanamad�: " + ex.Message);
             }
         }
 
         public Task LoadUrlAsync(string url, CancellationToken ct = default)
         {
             EnsureInitialized();
-            // Bayragi hemen set et: Source setter'i NavigationStarting'i asenkron tetikledigi icin
+            // Bayragi hemen set et: navigasyon NavigationStarting'i asenkron tetikledigi icin
             // hemen ardindan cagrilan WaitForPageLoadAsync yuklemeyi kacirmasin.
             _isNavigating = true;
-            _browser.Source = new Uri(url);
+            // ONEMLI: Source setter, AYNI URL verildiginde yeniden navigasyon BASLATMAYABILIR; bu
+            // durumda NavigationCompleted hic gelmez ve WaitForPageLoadAsync sonsuza kadar bekler
+            // (ayni /login'e art arda iki gidiste yasandi). CoreWebView2.Navigate HER ZAMAN navigasyon
+            // baslatir (ayni URL'de bile) -> NavigationCompleted garanti gelir.
+            _browser.CoreWebView2.Navigate(url);
             return Task.CompletedTask;
         }
 
@@ -175,8 +181,8 @@ namespace Yolcu360.BusinessLayer.Concrete
             {
                 ct.ThrowIfCancellationRequested();
                 var cwv = _browser.CoreWebView2;
-                // Gerçek (trusted) fare olayları: CDP Input.dispatchMouseEvent. Koordinatlar CSS px
-                // (getBoundingClientRect ile aynı düzlem). move → press → release sırasıyla gönderilir.
+                // Ger�ek (trusted) fare olaylar�: CDP Input.dispatchMouseEvent. Koordinatlar CSS px
+                // (getBoundingClientRect ile ayn� d�zlem). move � press � release s�ras�yla g�nderilir.
                 await cwv.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
                     JsonConvert.SerializeObject(new { type = "mouseMoved", x, y }));
                 await cwv.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
@@ -188,7 +194,7 @@ namespace Yolcu360.BusinessLayer.Concrete
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
-                LogHelper.Warning("WebView2 gerçek tıklama (CDP) hatası: " + ex.Message);
+                LogHelper.Warning("WebView2 ger�ek t�klama (CDP) hatas�: " + ex.Message);
                 return false;
             }
         }
@@ -250,15 +256,15 @@ namespace Yolcu360.BusinessLayer.Concrete
             EnsureInitialized();
             try
             {
-                // Yalnızca Yolcu360 alan adına ait çerezleri sil; reCAPTCHA/Google güven çerezleri
-                // (farklı alan adında: google.com/gstatic.com) bu sorguya dahil OLMAZ → korunur.
+                // Yaln�zca Yolcu360 alan ad�na ait �erezleri sil; reCAPTCHA/Google g�ven �erezleri
+                // (farkl� alan ad�nda: google.com/gstatic.com) bu sorguya dahil OLMAZ � korunur.
                 var cm = _browser.CoreWebView2.CookieManager;
                 var cookies = await cm.GetCookiesAsync("https://www.yolcu360.com");
                 int removed = 0;
                 foreach (var c in cookies)
                 {
                     var name = c.Name ?? string.Empty;
-                    // Garanti: yolcu360 alanında bir reCAPTCHA çerezi varsa onu da koru.
+                    // Garanti: yolcu360 alan�nda bir reCAPTCHA �erezi varsa onu da koru.
                     if (name.StartsWith("_GRECAPTCHA", StringComparison.OrdinalIgnoreCase) ||
                         name.StartsWith("rc::", StringComparison.OrdinalIgnoreCase))
                         continue;
@@ -266,19 +272,19 @@ namespace Yolcu360.BusinessLayer.Concrete
                     removed++;
                 }
 
-                // Yolcu360 sayfasının localStorage/sessionStorage'ı (oturum/token burada olabilir).
-                // reCAPTCHA güveni çerezde tutulduğu için bu temizlik onu etkilemez.
+                // Yolcu360 sayfas�n�n localStorage/sessionStorage'� (oturum/token burada olabilir).
+                // reCAPTCHA g�veni �erezde tutuldu�u i�in bu temizlik onu etkilemez.
                 await SafeExecuteScriptAsync(@"(function(){
                     try { localStorage.clear(); } catch(e) {}
                     try { sessionStorage.clear(); } catch(e) {}
                     return true;
                 })();", ct);
 
-                LogHelper.Info($"Yolcu360 oturumu temizlendi (yumuşak çıkış): {removed} çerez silindi, reCAPTCHA güveni korundu.");
+                LogHelper.Info($"Yolcu360 oturumu temizlendi (yumu�ak ��k��): {removed} �erez silindi, reCAPTCHA g�veni korundu.");
             }
             catch (Exception ex)
             {
-                LogHelper.Warning("Yumuşak çıkış tamamlanamadı: " + ex.Message);
+                LogHelper.Warning("Yumu�ak ��k�� tamamlanamad�: " + ex.Message);
             }
         }
 
@@ -299,12 +305,12 @@ namespace Yolcu360.BusinessLayer.Concrete
                         Path = c.Path,
                         Secure = c.IsSecure,
                         HttpOnly = c.IsHttpOnly,
-                        // CoreWebView2Cookie.Expires bir DateTime; oturum çerezinde IsSession=true.
+                        // CoreWebView2Cookie.Expires bir DateTime; oturum �erezinde IsSession=true.
                         Expires = c.IsSession ? (DateTime?)null : c.Expires
                     });
                 }
             }
-            catch (Exception ex) { LogHelper.Warning("WebView2 çerez export hatası: " + ex.Message); }
+            catch (Exception ex) { LogHelper.Warning("WebView2 �erez export hatas�: " + ex.Message); }
             return result;
         }
 
@@ -324,7 +330,7 @@ namespace Yolcu360.BusinessLayer.Concrete
                     cm.AddOrUpdateCookie(wc);
                 }
             }
-            catch (Exception ex) { LogHelper.Warning("WebView2 çerez import hatası: " + ex.Message); }
+            catch (Exception ex) { LogHelper.Warning("WebView2 �erez import hatas�: " + ex.Message); }
             return Task.CompletedTask;
         }
 

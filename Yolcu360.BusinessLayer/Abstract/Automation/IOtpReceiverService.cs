@@ -1,4 +1,4 @@
-namespace Yolcu360.BusinessLayer.Abstract
+namespace Yolcu360.BusinessLayer.Abstract.Automation
 {
     /// <summary>
     /// MacroDroid'in telefondan gönderdiği 6 haneli OTP kodunu yerel bir HTTP dinleyici ile

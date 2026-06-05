@@ -12,11 +12,11 @@ namespace Yolcu360.BusinessLayer.Concrete
     ///
     /// GÜVENLİK: Kişisel sürücü bilgileri (TC, telefon, e-posta vb.) loga AÇIK YAZILMAZ.
     /// </summary>
-    public class SimulatedRentalManager : ISimulatedRentalService
+    public class RentalSimulationManager : IRentalSimulationService
     {
         private readonly ISimulatedRentalRepository _repository;
 
-        public SimulatedRentalManager(ISimulatedRentalRepository repository)
+        public RentalSimulationManager(ISimulatedRentalRepository repository)
         {
             _repository = repository;
         }

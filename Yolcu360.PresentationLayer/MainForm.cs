@@ -157,7 +157,7 @@ namespace Yolcu360.PresentationLayer
             };
             menu.Controls.Add(SideButton("🔍   Arac Ara", (s, e) => SetStatus("Arama paneli hazir."), true));
             menu.Controls.Add(SideButton("🕘   Gecmis Raporlar", async (s, e) => await OpenReportsAsync()));
-            menu.Controls.Add(SideButton("🚗   Simulasyon Gecmisi", (s, e) => new RentalSimulationHistoryForm(_services.SimulatedRentalService, _services.SimulationPngService).ShowDialog(this)));
+            menu.Controls.Add(SideButton("🚗   Simulasyon Gecmisi", (s, e) => new RentalSimulationHistoryForm(_services.RentalSimulationService, _services.SimulationPngService).ShowDialog(this)));
             menu.Controls.Add(SideButton("📊   Rapor Karsilastir", (s, e) => new ReportCompareForm(_services.ReportService).Show(this)));
             menu.Controls.Add(SideButton("🌐   Tarayici", (s, e) => RevealBrowser(!_browserVisible)));
             sidebar.Controls.Add(menu);
@@ -239,11 +239,11 @@ namespace Yolcu360.PresentationLayer
                 Padding = new Padding(0, 12, 0, 0)
             };
             var btnToggle = UiStyleHelper.Button("Tarayiciyi Goster/Gizle", ButtonVariant.Secondary, 210);
-            btnToggle.Click += (s, e) => RevealBrowser(!_browserVisible);
+            btnToggle.Click += btnToggleBrowser_Click;
             var btnLogin = UiStyleHelper.Button("Giris Yap", ButtonVariant.Accent, 120);
-            btnLogin.Click += OnAutoLoginClick;
+            btnLogin.Click += btnLogin_Click;
             var btnLogout = UiStyleHelper.Button("Cikis Yap", ButtonVariant.Danger, 120);
-            btnLogout.Click += OnLogoutClick;
+            btnLogout.Click += btnLogout_Click;
             _actionButtons.Add(btnLogin);
             // RightToLeft akış: önce eklenen en sağda. Sıra (soldan sağa): Çıkış | Giriş | Göster/Gizle
             actions.Controls.Add(btnToggle);
@@ -303,15 +303,15 @@ namespace Yolcu360.PresentationLayer
             p.SetColumnSpan(_cmbProfiles, 3);
 
             var btnSearch = UiStyleHelper.Button("Ara", ButtonVariant.Primary, 110);
-            btnSearch.Click += async (s, e) => await SearchAsync();
+            btnSearch.Click += btnSearch_Click;
             var btnClear = UiStyleHelper.Button("Temizle", ButtonVariant.Secondary, 100);
-            btnClear.Click += (s, e) => ClearSearch();
+            btnClear.Click += btnClearSearch_Click;
             var btnProfile = UiStyleHelper.Button("Yukle ve Ara", ButtonVariant.Accent, 140);
-            btnProfile.Click += async (s, e) => await LoadSelectedProfileAndSearchAsync();
+            btnProfile.Click += btnLoadProfile_Click;
             var btnSaveProfile = UiStyleHelper.Button("Profili Kaydet", ButtonVariant.Success, 140);
-            btnSaveProfile.Click += async (s, e) => await SaveCurrentProfileAsync();
+            btnSaveProfile.Click += btnSaveProfile_Click;
             var btnDeleteProfile = UiStyleHelper.Button("Profili Sil", ButtonVariant.Danger, 100);
-            btnDeleteProfile.Click += async (s, e) => await DeleteSelectedProfileAsync();
+            btnDeleteProfile.Click += btnDeleteProfile_Click;
             _actionButtons.AddRange(new Control[] { btnSearch, btnProfile, btnSaveProfile });
 
             // Arama aksiyonları (row 4) ve profil aksiyonları (row 5) ayrı satırlarda → sığar, kesilmez.
@@ -373,9 +373,9 @@ namespace Yolcu360.PresentationLayer
             p.Controls.Add(hint);
 
             var btnApply = UiStyleHelper.Button("Filtreleri Uygula", ButtonVariant.Accent, 170);
-            btnApply.Click += async (s, e) => await ApplyFiltersAsync();
+            btnApply.Click += btnApplyFilters_Click;
             var btnClear = UiStyleHelper.Button("Filtreleri Temizle", ButtonVariant.Secondary, 180);
-            btnClear.Click += async (s, e) => await ClearFiltersAsync();
+            btnClear.Click += btnClearFilters_Click;
             var actions = new FlowLayoutPanel { Width = 450, Height = 42, FlowDirection = FlowDirection.LeftToRight, BackColor = Color.Transparent };
             actions.Controls.Add(btnApply);
             actions.Controls.Add(btnClear);
@@ -392,30 +392,30 @@ namespace Yolcu360.PresentationLayer
             var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, BackColor = Color.Transparent, Padding = new Padding(0, 4, 0, 0) };
             var btnSave = UiStyleHelper.Button("Raporu Kaydet", ButtonVariant.Primary, 140);
             btnSave.Margin = new Padding(0, 0, 6, 0);
-            btnSave.Click += async (s, e) => await SaveReportAsync();
+            btnSave.Click += btnSaveReport_Click;
             var btnDelete = UiStyleHelper.Button("Listeyi Temizle", ButtonVariant.Danger, 140);
             btnDelete.Margin = new Padding(0, 0, 6, 0);
-            btnDelete.Click += (s, e) => { _displayedCars.Clear(); _allCars.Clear(); BindGrid(); };
+            btnDelete.Click += btnClearResults_Click;
             var btnPng = UiStyleHelper.Button("PNG", ButtonVariant.Secondary, 70);
             btnPng.Margin = new Padding(0, 0, 6, 0);
-            btnPng.Click += async (s, e) => await ExportPngAsync();
+            btnPng.Click += btnExportPng_Click;
             var btnCsv = UiStyleHelper.Button("CSV", ButtonVariant.Secondary, 70);
             btnCsv.Margin = new Padding(0, 0, 6, 0);
-            btnCsv.Click += async (s, e) => await ExportCsvAsync();
+            btnCsv.Click += btnExportCsv_Click;
             var btnExcel = UiStyleHelper.Button("Excel", ButtonVariant.Secondary, 80);
             btnExcel.Margin = new Padding(0, 0, 14, 0);
-            btnExcel.Click += async (s, e) => await ExportExcelAsync();
+            btnExcel.Click += btnExportExcel_Click;
 
             // Seçili araçla kiralama SİMÜLASYONU (gerçek rezervasyon/ödeme yok).
             var btnSimulate = UiStyleHelper.Button("Kiralamayı Simüle Et", ButtonVariant.Accent, 190);
             btnSimulate.Margin = new Padding(0, 0, 14, 0);
-            btnSimulate.Click += (s, e) => OpenRentalSimulation();
+            btnSimulate.Click += btnSimulation_Click;
 
             // Araç adına göre grid'de arama (yalnızca tabloyu filtreler; siteye gitmez).
             _txtGridSearch = UiStyleHelper.TextBox(200);
             _txtGridSearch.PlaceholderText = "Arac adina gore ara...";
             _txtGridSearch.Margin = new Padding(0, 0, 10, 0);
-            _txtGridSearch.TextChanged += (s, e) => BindGrid();
+            _txtGridSearch.TextChanged += (s, e) => BindCarsToGrid();
 
             _lblCarCount = new Label
             {
@@ -886,7 +886,7 @@ namespace Yolcu360.PresentationLayer
             _browserHost.Controls.Add(browser);
         }
 
-        private async Task SearchAsync()
+        private async Task SearchCarsAsync()
         {
             var request = BuildSearchRequest();
             // Geçmiş alış zamanı: site "bu saat diliminde arama yapılamaz" uyarısı verir ve sonuç
@@ -908,10 +908,10 @@ namespace Yolcu360.PresentationLayer
             try
             {
                 var progress = new Progress<string>(SetStatus);
-                _allCars = await _services.AutomationService.SearchAsync(request, progress, _searchCts.Token);
+                _allCars = await _services.CarSearchService.SearchCarsAsync(request, progress, _searchCts.Token);
                 _displayedCars = _allCars.ToList();
                 SortDisplayedByPriceAscending();
-                BindGrid();
+                BindCarsToGrid();
                 await PopulateFiltersFromSiteAsync(_searchCts.Token);
             }
             catch (OperationCanceledException) { }
@@ -931,7 +931,7 @@ namespace Yolcu360.PresentationLayer
         {
             try
             {
-                _siteFilters = await _services.AutomationService.ScrapeSiteFiltersAsync(ct);
+                _siteFilters = await _services.CarScrapingService.ScrapeSiteFiltersAsync(ct);
             }
             catch (Exception ex)
             {
@@ -1033,11 +1033,11 @@ namespace Yolcu360.PresentationLayer
                 // Filtreler YALNIZCA site üzerinde uygulanır (uygulama içi/local filtre YOK). Seçili
                 // filtreler siteye yansıtılır, liste sitede güncellenir ve yeniden kazınır; Grid sadece
                 // siteden geleni gösterir. Boş filtre = site filtrelerini temizler.
-                await _services.AutomationService.ApplyFiltersOnWebsiteAsync(filter);
-                _allCars = await _services.AutomationService.ScrapeCurrentResultsAsync(BuildSearchRequest());
+                await _services.CarSearchService.ApplyFiltersOnWebsiteAsync(filter);
+                _allCars = await _services.CarScrapingService.ScrapeCarsAsync(BuildSearchRequest());
                 _displayedCars = _allCars.ToList();
                 SortDisplayedByPriceAscending();
-                BindGrid();
+                BindCarsToGrid();
                 await PopulateFiltersFromSiteAsync(CancellationToken.None);
             }
             catch (Exception ex)
@@ -1090,7 +1090,7 @@ namespace Yolcu360.PresentationLayer
         /// Grid'de seçili araçla Araç Kiralama Simülasyonu sihirbazını açar. Araç seçili değilse uyarır.
         /// Gerçek rezervasyon/ödeme YAPILMAZ; yalnızca uygulama içi simülasyon kaydı oluşur.
         /// </summary>
-        private void OpenRentalSimulation()
+        private void StartRentalSimulation()
         {
             if (_dgv.CurrentRow?.DataBoundItem is not ResultCarDto car)
             {
@@ -1098,7 +1098,7 @@ namespace Yolcu360.PresentationLayer
                 return;
             }
 
-            using var form = new RentalSimulationForm(_services.SimulatedRentalService, _services.SimulationPngService, car);
+            using var form = new RentalSimulationForm(_services.RentalSimulationService, _services.SimulationPngService, car);
             if (form.ShowDialog(this) == DialogResult.OK && form.CompletedSummary != null)
             {
                 SetStatus($"Simulasyon tamamlandi. Kod: {form.CompletedSummary.SimulationCode}");
@@ -1115,7 +1115,7 @@ namespace Yolcu360.PresentationLayer
                 _allCars = await _services.ReportService.GetReportCarsAsync(form.SelectedReport.Id);
                 _displayedCars = _allCars.ToList();
                 SortDisplayedByPriceAscending();
-                BindGrid();
+                BindCarsToGrid();
                 SetStatus("Gecmis rapor yuklendi.");
             }
             catch (Exception ex)
@@ -1175,7 +1175,7 @@ namespace Yolcu360.PresentationLayer
                 _dtReturn.Value = profile.ReturnDateTime;
                 _cmbPickupHour.Text = profile.PickupDateTime.ToString("HH\\:mm");
                 _cmbReturnHour.Text = profile.ReturnDateTime.ToString("HH\\:mm");
-                await SearchAsync();
+                await SearchCarsAsync();
             }
             catch { UiHelper.Warn("Profil yuklenemedi."); }
         }
@@ -1217,7 +1217,35 @@ namespace Yolcu360.PresentationLayer
             }
         }
 
-        private void OnAutoLoginClick(object sender, EventArgs e)
+        // ---- Buton olay yöneticileri ----
+        // Her buton, ilgili yüksek seviyeli iş metodunu çağırır. Visual Studio'da bir butona sağ
+        // tıklayıp "Tanıma Git" deyince doğrudan buraya, oradan da iş akışına ulaşılır.
+        // Örn: btnSearch_Click → SearchCarsAsync → CarSearchService.SearchCarsAsync → CarScrapingService.ScrapeCarsAsync
+
+        private async void btnSearch_Click(object sender, EventArgs e) => await SearchCarsAsync();
+        private void btnClearSearch_Click(object sender, EventArgs e) => ClearSearch();
+        private async void btnLoadProfile_Click(object sender, EventArgs e) => await LoadSelectedProfileAndSearchAsync();
+        private async void btnSaveProfile_Click(object sender, EventArgs e) => await SaveCurrentProfileAsync();
+        private async void btnDeleteProfile_Click(object sender, EventArgs e) => await DeleteSelectedProfileAsync();
+
+        private async void btnApplyFilters_Click(object sender, EventArgs e) => await ApplyFiltersAsync();
+        private async void btnClearFilters_Click(object sender, EventArgs e) => await ClearFiltersAsync();
+
+        private async void btnSaveReport_Click(object sender, EventArgs e) => await SaveReportAsync();
+        private void btnClearResults_Click(object sender, EventArgs e)
+        {
+            _displayedCars.Clear();
+            _allCars.Clear();
+            BindCarsToGrid();
+        }
+        private async void btnExportPng_Click(object sender, EventArgs e) => await ExportPngAsync();
+        private async void btnExportCsv_Click(object sender, EventArgs e) => await ExportCsvAsync();
+        private async void btnExportExcel_Click(object sender, EventArgs e) => await ExportExcelAsync();
+
+        private void btnSimulation_Click(object sender, EventArgs e) => StartRentalSimulation();
+        private void btnToggleBrowser_Click(object sender, EventArgs e) => RevealBrowser(!_browserVisible);
+
+        private void btnLogin_Click(object sender, EventArgs e)
         {
             // Yeniden giriş: aynı AuthForm kapısını modal aç. Başarılı olursa giriş durumu güncellenir.
             using var auth = new AuthForm(_services);
@@ -1230,7 +1258,7 @@ namespace Yolcu360.PresentationLayer
         /// sessionStorage silinir, Google/reCAPTCHA güven çerezleri KORUNUR. Böylece tekrar girişte
         /// reCAPTCHA "şüpheli yeni tarayıcı" deyip engellemez.
         /// </summary>
-        private async void OnLogoutClick(object sender, EventArgs e)
+        private async void btnLogout_Click(object sender, EventArgs e)
         {
             if (!UiHelper.Confirm("Site oturumu kapatılsın mı? (logout)\nYolcu360 çerezleri silinir; reCAPTCHA güveni korunur.", "Çıkış Yap"))
                 return;
@@ -1287,7 +1315,7 @@ namespace Yolcu360.PresentationLayer
             _lblLoginStatus.ForeColor = ok ? ThemeColors.Success : ThemeColors.Warning;
         });
 
-        private void BindGrid()
+        private void BindCarsToGrid()
         {
             // Grid'de gösterilecek görünüm = sonuç listesi, araç adı arama kutusuyla filtrelenmiş.
             var term = _txtGridSearch?.Text?.Trim();
@@ -1344,7 +1372,7 @@ namespace Yolcu360.PresentationLayer
             var pi = typeof(ResultCarDto).GetProperty(prop);
             if (pi == null) return;
             _displayedCars = (_sortAsc ? _displayedCars.OrderBy(c => pi.GetValue(c)) : _displayedCars.OrderByDescending(c => pi.GetValue(c))).ToList();
-            BindGrid();
+            BindCarsToGrid();
         }
 
         /// <summary>Sonuç listesini fiyata göre küçükten büyüğe sıralar (fiyatsızlar en sona).</summary>
@@ -1475,7 +1503,7 @@ namespace Yolcu360.PresentationLayer
             if (_allCars.Count == 0)
             {
                 _displayedCars = new List<ResultCarDto>();
-                BindGrid();
+                BindCarsToGrid();
                 return;
             }
 
@@ -1484,11 +1512,11 @@ namespace Yolcu360.PresentationLayer
             SetBusy(true);
             try
             {
-                await _services.AutomationService.ApplyFiltersOnWebsiteAsync(new FilterRequestDto());
-                _allCars = await _services.AutomationService.ScrapeCurrentResultsAsync(BuildSearchRequest());
+                await _services.CarSearchService.ApplyFiltersOnWebsiteAsync(new FilterRequestDto());
+                _allCars = await _services.CarScrapingService.ScrapeCarsAsync(BuildSearchRequest());
                 _displayedCars = _allCars.ToList();
                 SortDisplayedByPriceAscending();
-                BindGrid();
+                BindCarsToGrid();
                 await PopulateFiltersFromSiteAsync(CancellationToken.None);
                 SetStatus("Filtreler temizlendi.");
             }

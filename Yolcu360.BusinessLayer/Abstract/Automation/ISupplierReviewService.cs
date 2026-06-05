@@ -1,7 +1,7 @@
 using Yolcu360.DtoLayer.CarResultDto;
 using Yolcu360.DtoLayer.ReviewDto;
 
-namespace Yolcu360.BusinessLayer.Abstract
+namespace Yolcu360.BusinessLayer.Abstract.Automation
 {
     /// <summary>
     /// Seçili aracın kiralama firmasına ait, Yolcu360 üzerinde ZATEN GÖRÜNEN değerlendirme

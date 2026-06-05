@@ -1,4 +1,6 @@
-ï»¿using System.Windows.Forms;
+using Yolcu360.BusinessLayer.Abstract.Browser;
+using Yolcu360.Common.Automation;
+using System.Windows.Forms;
 using CefSharp;
 using CefSharp.WinForms;
 using Newtonsoft.Json;
@@ -8,11 +10,11 @@ using Yolcu360.Common.Helpers;
 using Yolcu360.Common.Logging;
 using Yolcu360.DtoLayer.BrowserDto;
 
-namespace Yolcu360.BusinessLayer.Concrete
+namespace Yolcu360.BusinessLayer.Concrete.Browser
 {
     /// <summary>
-    /// CefSharp Chromium tarayÄ±cÄ±sÄ±nÄ±n somut yÃ¶neticisi. TÃ¼m beklemeler async/await,
-    /// olaylar (LoadingStateChanged) ve TaskCompletionSource ile yapÄ±lÄ±r.
+    /// CefSharp Chromium tarayýcýsýnýn somut yöneticisi. Tüm beklemeler async/await,
+    /// olaylar (LoadingStateChanged) ve TaskCompletionSource ile yapýlýr.
     /// </summary>
     public class CefSharpBrowserManager : ICefSharpBrowserService
     {
@@ -30,16 +32,16 @@ namespace Yolcu360.BusinessLayer.Concrete
             if (IsInitialized)
                 return Task.CompletedTask;
 
-            // CefSharp tek sefer baÅŸlatÄ±lÄ±r (UI thread'de, ilk tarayÄ±cÄ± oluÅŸturulmadan Ã¶nce).
+            // CefSharp tek sefer baþlatýlýr (UI thread'de, ilk tarayýcý oluþturulmadan önce).
             if (Cef.IsInitialized != true)
             {
-                // SADELÄ°K Ä°LKESÄ°: TarayÄ±cÄ±ya hiÃ§bir "anti-bot" numarasÄ±/bayraÄŸÄ± EKLENMEZ.
-                // DÃ¼z/varsayÄ±lan CefSharp, kendi iÃ§inde tutarlÄ± normal bir Chromium'dur ve
-                // reCAPTCHA'yÄ± en doÄŸal ÅŸekilde bÃ¶yle geÃ§er. (Eklenen sahte UA / komut satÄ±rÄ±
-                // bayraklarÄ± tutarsÄ±zlÄ±k yaratÄ±p puanÄ± DÃœÅžÃœRÃœYORDU; hepsi kaldÄ±rÄ±ldÄ±.)
-                // CachePath + PersistSessionCookies yalnÄ±zca oturumun kalÄ±cÄ± olmasÄ± iÃ§indir
-                // (manuel login sonrasÄ± aynÄ± session); bunlar standart kalÄ±cÄ±lÄ±k ayarlarÄ±dÄ±r.
-                // Cache %AppData%\Yolcu360_Otomation\CefCache altÄ±nda tutulur (cookie/session/localStorage kalÄ±cÄ±).
+                // SADELÝK ÝLKESÝ: Tarayýcýya hiçbir "anti-bot" numarasý/bayraðý EKLENMEZ.
+                // Düz/varsayýlan CefSharp, kendi içinde tutarlý normal bir Chromium'dur ve
+                // reCAPTCHA'yý en doðal þekilde böyle geçer. (Eklenen sahte UA / komut satýrý
+                // bayraklarý tutarsýzlýk yaratýp puaný DÜÞÜRÜYORDU; hepsi kaldýrýldý.)
+                // CachePath + PersistSessionCookies yalnýzca oturumun kalýcý olmasý içindir
+                // (manuel login sonrasý ayný session); bunlar standart kalýcýlýk ayarlarýdýr.
+                // Cache %AppData%\Yolcu360_Otomation\CefCache altýnda tutulur (cookie/session/localStorage kalýcý).
                 var settings = new CefSettings
                 {
                     CachePath = Path.Combine(
@@ -49,7 +51,7 @@ namespace Yolcu360.BusinessLayer.Concrete
                 };
 
                 Cef.Initialize(settings);
-                LogHelper.Info("CefSharp baÅŸlatÄ±ldÄ± (dÃ¼z/varsayÄ±lan profil).");
+                LogHelper.Info("CefSharp baþlatýldý (düz/varsayýlan profil).");
             }
 
             _browser = new ChromiumWebBrowser(url)
@@ -57,29 +59,29 @@ namespace Yolcu360.BusinessLayer.Concrete
                 Dock = DockStyle.Fill,
                 Visible = _visible
             };
-            // VIEWPORT KÄ°LÄ°DÄ° + sayfa yÃ¼klendi logu. Yolcu360 responsive â€” pencere bÃ¼yÃ¼tÃ¼lÃ¼nce site
-            // masaÃ¼stÃ¼ layout'una geÃ§ip selector'larÄ± kÄ±rÄ±yordu (takvim/saat/filtre). CDP (DevTools)
-            // Emulation.setDeviceMetricsOverride ile sabit CSS viewport (1000 = tablet) zorlanÄ±r; her
-            // TAM yÃ¼klemede (idempotent) uygulanÄ±r. DevTools Ã§aÄŸrÄ±sÄ± CEF UI thread'ine marshal edilir
-            // (erken/yanlÄ±ÅŸ thread Ã§aÄŸrÄ±sÄ± ExecutionEngineException ile Ã§Ã¶kertiyordu).
+            // VIEWPORT KÝLÝDÝ + sayfa yüklendi logu. Yolcu360 responsive — pencere büyütülünce site
+            // masaüstü layout'una geçip selector'larý kýrýyordu (takvim/saat/filtre). CDP (DevTools)
+            // Emulation.setDeviceMetricsOverride ile sabit CSS viewport (1000 = tablet) zorlanýr; her
+            // TAM yüklemede (idempotent) uygulanýr. DevTools çaðrýsý CEF UI thread'ine marshal edilir
+            // (erken/yanlýþ thread çaðrýsý ExecutionEngineException ile çökertiyordu).
             _browser.LoadingStateChanged += async (s, e) =>
             {
                 if (!e.IsLoading)
                 {
-                    LogHelper.Info($"Sayfa yÃ¼klendi: {_browser.Address}");
+                    LogHelper.Info($"Sayfa yüklendi: {_browser.Address}");
                     await ApplyViewportLockAsync();
                 }
             };
 
             IsInitialized = true;
-            LogHelper.Info($"Yolcu360 tarayÄ±cÄ± kontrolÃ¼ oluÅŸturuldu ({url}).");
+            LogHelper.Info($"Yolcu360 tarayýcý kontrolü oluþturuldu ({url}).");
             return Task.CompletedTask;
         }
 
         /// <summary>
         /// CDP (DevTools) Emulation.setDeviceMetricsOverride ile sabit bir CSS viewport zorlar
-        /// (geniÅŸlik 1000 = tablet aralÄ±ÄŸÄ±: site, selector'larÄ±mÄ±zÄ±n doÄŸrulandÄ±ÄŸÄ± layout'u render eder).
-        /// Pencere bÃ¼yÃ¼tÃ¼lse/kÃ¼Ã§Ã¼ltÃ¼lse bile site DOM'u deÄŸiÅŸmez. Best-effort: hata olursa yalnÄ±zca loglanÄ±r.
+        /// (geniþlik 1000 = tablet aralýðý: site, selector'larýmýzýn doðrulandýðý layout'u render eder).
+        /// Pencere büyütülse/küçültülse bile site DOM'u deðiþmez. Best-effort: hata olursa yalnýzca loglanýr.
         /// </summary>
         private async Task ApplyViewportLockAsync()
         {
@@ -96,13 +98,13 @@ namespace Yolcu360.BusinessLayer.Concrete
             }
             catch (Exception ex)
             {
-                LogHelper.Warning("Viewport kilidi uygulanamadÄ± (CEF): " + ex.Message);
+                LogHelper.Warning("Viewport kilidi uygulanamadý (CEF): " + ex.Message);
             }
         }
 
-        // CDP/DevTools Ã§aÄŸrÄ±larÄ± IBrowserHost.ExecuteDevToolsMethod ile yapÄ±lÄ±r. Ã–NEMLÄ°: bu Ã§aÄŸrÄ±
-        // CEF UI THREAD'inde olmalÄ±; aksi halde ExecutionEngineException (Ã¶lÃ¼mcÃ¼l native crash) olur.
-        // Bu yÃ¼zden gerekirse Cef.UIThreadTaskFactory ile marshal edilir.
+        // CDP/DevTools çaðrýlarý IBrowserHost.ExecuteDevToolsMethod ile yapýlýr. ÖNEMLÝ: bu çaðrý
+        // CEF UI THREAD'inde olmalý; aksi halde ExecutionEngineException (ölümcül native crash) olur.
+        // Bu yüzden gerekirse Cef.UIThreadTaskFactory ile marshal edilir.
         private int _devToolsMsgId;
 
         private async Task DevToolsAsync(string method, IDictionary<string, object> parameters)
@@ -127,8 +129,8 @@ namespace Yolcu360.BusinessLayer.Concrete
         }
 
         /// <summary>
-        /// Aktif yÃ¼kleme tamamlanana kadar bekler. HiÃ§ yÃ¼kleme yoksa hemen dÃ¶ner.
-        /// LoadingStateChanged olayÄ± + TaskCompletionSource kullanÄ±r.
+        /// Aktif yükleme tamamlanana kadar bekler. Hiç yükleme yoksa hemen döner.
+        /// LoadingStateChanged olayý + TaskCompletionSource kullanýr.
         /// </summary>
         public Task WaitForPageLoadAsync(CancellationToken ct = default)
         {
@@ -180,7 +182,7 @@ namespace Yolcu360.BusinessLayer.Concrete
                 () => EvaluateBoolAsync(script, ct), timeoutSeconds, 300, ct);
 
             if (!found)
-                LogHelper.Warning($"Element bulunamadÄ± (zaman aÅŸÄ±mÄ±). Denenen selector'lar: {string.Join(" | ", selectors)}");
+                LogHelper.Warning($"Element bulunamadý (zaman aþýmý). Denenen selector'lar: {string.Join(" | ", selectors)}");
             return found;
         }
 
@@ -189,8 +191,8 @@ namespace Yolcu360.BusinessLayer.Concrete
             var script = JsHelper.BuildClickScript(selectors);
             var ok = await EvaluateBoolAsync(script, ct);
             LogHelper.Info(ok
-                ? $"TÄ±klandÄ±: {selectors[0]} (ve alternatifleri)"
-                : $"TÄ±klanacak element bulunamadÄ±: {string.Join(" | ", selectors)}");
+                ? $"Týklandý: {selectors[0]} (ve alternatifleri)"
+                : $"Týklanacak element bulunamadý: {string.Join(" | ", selectors)}");
             return ok;
         }
 
@@ -200,10 +202,10 @@ namespace Yolcu360.BusinessLayer.Concrete
             try
             {
                 ct.ThrowIfCancellationRequested();
-                // GerÃ§ek (trusted) fare olaylarÄ±: CDP (DevTools) Input.dispatchMouseEvent. Koordinatlar
-                // CSS px (getBoundingClientRect ile aynÄ±, viewport override dÃ¼zleminde). BazÄ± Vue
-                // widget'larÄ± (Ã¶r. saat menÃ¼sÃ¼) JS ile dispatch edilen (isTrusted=false) olaylara
-                // tepki vermez; bu yÃ¶ntem gerÃ§ek giriÅŸle Ã§Ã¶zer. move â†’ press â†’ release.
+                // Gerçek (trusted) fare olaylarý: CDP (DevTools) Input.dispatchMouseEvent. Koordinatlar
+                // CSS px (getBoundingClientRect ile ayný, viewport override düzleminde). Bazý Vue
+                // widget'larý (ör. saat menüsü) JS ile dispatch edilen (isTrusted=false) olaylara
+                // tepki vermez; bu yöntem gerçek giriþle çözer. move › press › release.
                 await DispatchMouseAsync("mouseMoved", x, y, withButton: false);
                 await DispatchMouseAsync("mousePressed", x, y, withButton: true);
                 await DispatchMouseAsync("mouseReleased", x, y, withButton: true);
@@ -212,7 +214,7 @@ namespace Yolcu360.BusinessLayer.Concrete
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
-                LogHelper.Warning("CEF gerÃ§ek tÄ±klama (CDP) hatasÄ±: " + ex.Message);
+                LogHelper.Warning("CEF gerçek týklama (CDP) hatasý: " + ex.Message);
                 return false;
             }
         }
@@ -234,8 +236,8 @@ namespace Yolcu360.BusinessLayer.Concrete
             var script = JsHelper.BuildSetInputValueScript(selectors, value);
             var ok = await EvaluateBoolAsync(script, ct);
             LogHelper.Info(ok
-                ? $"DeÄŸer yazÄ±ldÄ± ('{value}') -> {selectors[0]}"
-                : $"Input bulunamadÄ±: {string.Join(" | ", selectors)}");
+                ? $"Deðer yazýldý ('{value}') -> {selectors[0]}"
+                : $"Input bulunamadý: {string.Join(" | ", selectors)}");
             return ok;
         }
 
@@ -267,7 +269,7 @@ namespace Yolcu360.BusinessLayer.Concrete
             var found = await BrowserWaitHelper.PollUntilAsync(
                 () => EvaluateBoolAsync(script, ct), timeoutSeconds, 400, ct);
 
-            LogHelper.Info(found ? "SonuÃ§ kartlarÄ± yÃ¼klendi." : "SonuÃ§ kartlarÄ± bulunamadÄ± (zaman aÅŸÄ±mÄ±).");
+            LogHelper.Info(found ? "Sonuç kartlarý yüklendi." : "Sonuç kartlarý bulunamadý (zaman aþýmý).");
             return found;
         }
 
@@ -311,7 +313,7 @@ namespace Yolcu360.BusinessLayer.Concrete
 
             try
             {
-                // GetBrowserHost()/RequestContext tarayÄ±cÄ± tam baÅŸlatÄ±lmamÄ±ÅŸsa null olabilir â†’ null-gÃ¼venli.
+                // GetBrowserHost()/RequestContext tarayýcý tam baþlatýlmamýþsa null olabilir › null-güvenli.
                 var ctx = _browser?.GetBrowser()?.GetHost()?.RequestContext;
                 if (ctx != null)
                     await ctx.ClearHttpAuthCredentialsAsync();
@@ -324,9 +326,9 @@ namespace Yolcu360.BusinessLayer.Concrete
 
         public async Task ClearSiteSessionAsync(CancellationToken ct = default)
         {
-            // YUMUÅžAK Ã‡IKIÅž: yalnÄ±zca Yolcu360 alan adÄ±nÄ±n Ã§erezleri + storage temizlenir.
-            // Google/reCAPTCHA gÃ¼ven Ã§erezlerine (farklÄ± alan adÄ±) DOKUNULMAZ â†’ Ã§Ä±kÄ±ÅŸ sonrasÄ± tekrar
-            // giriÅŸte reCAPTCHA seni "ÅŸÃ¼pheli yeni tarayÄ±cÄ±" sayÄ±p engellemez.
+            // YUMUÞAK ÇIKIÞ: yalnýzca Yolcu360 alan adýnýn çerezleri + storage temizlenir.
+            // Google/reCAPTCHA güven çerezlerine (farklý alan adý) DOKUNULMAZ › çýkýþ sonrasý tekrar
+            // giriþte reCAPTCHA seni "þüpheli yeni tarayýcý" sayýp engellemez.
             EnsureInitialized();
 
             try
@@ -339,21 +341,21 @@ namespace Yolcu360.BusinessLayer.Concrete
             }
             catch (Exception ex)
             {
-                LogHelper.Warning("CEF storage temizlenemedi (yumuÅŸak Ã§Ä±kÄ±ÅŸ): " + ex.Message);
+                LogHelper.Warning("CEF storage temizlenemedi (yumuþak çýkýþ): " + ex.Message);
             }
 
             try
             {
                 var manager = Cef.GetGlobalCookieManager();
-                // SADECE Yolcu360 alan adÄ± Ã§erezleri (null,null = TÃœM Ã§erezler KULLANILMAZ).
+                // SADECE Yolcu360 alan adý çerezleri (null,null = TÜM çerezler KULLANILMAZ).
                 await manager.DeleteCookiesAsync("https://www.yolcu360.com", null);
                 await manager.DeleteCookiesAsync("https://yolcu360.com", null);
                 await manager.FlushStoreAsync();
-                LogHelper.Info("Yolcu360 oturumu temizlendi (yumuÅŸak Ã§Ä±kÄ±ÅŸ, reCAPTCHA gÃ¼veni korundu).");
+                LogHelper.Info("Yolcu360 oturumu temizlendi (yumuþak çýkýþ, reCAPTCHA güveni korundu).");
             }
             catch (Exception ex)
             {
-                LogHelper.Warning("CEF yumuÅŸak Ã§Ä±kÄ±ÅŸ tamamlanamadÄ±: " + ex.Message);
+                LogHelper.Warning("CEF yumuþak çýkýþ tamamlanamadý: " + ex.Message);
             }
         }
 
@@ -372,7 +374,7 @@ namespace Yolcu360.BusinessLayer.Concrete
                             Secure = c.Secure, HttpOnly = c.HttpOnly, Expires = c.Expires
                         });
             }
-            catch (Exception ex) { LogHelper.Warning("CEF Ã§erez export hatasÄ±: " + ex.Message); }
+            catch (Exception ex) { LogHelper.Warning("CEF çerez export hatasý: " + ex.Message); }
             return result;
         }
 
@@ -393,9 +395,9 @@ namespace Yolcu360.BusinessLayer.Concrete
                     if (await manager.SetCookieAsync(url, cef)) ok++;
                 }
                 await manager.FlushStoreAsync();
-                LogHelper.Info($"CEF'e {ok}/{cookies.Count} oturum Ã§erezi kÃ¶prÃ¼lendi.");
+                LogHelper.Info($"CEF'e {ok}/{cookies.Count} oturum çerezi köprülendi.");
             }
-            catch (Exception ex) { LogHelper.Warning("CEF Ã§erez import hatasÄ±: " + ex.Message); }
+            catch (Exception ex) { LogHelper.Warning("CEF çerez import hatasý: " + ex.Message); }
         }
 
         public void SetBrowserVisible(bool visible)
@@ -403,10 +405,10 @@ namespace Yolcu360.BusinessLayer.Concrete
             _visible = visible;
             if (_browser != null)
                 _browser.Visible = visible;
-            LogHelper.Info($"TarayÄ±cÄ± gÃ¶rÃ¼nÃ¼rlÃ¼ÄŸÃ¼: {(visible ? "GÃ¶rÃ¼nÃ¼r" : "Gizli")}");
+            LogHelper.Info($"Tarayýcý görünürlüðü: {(visible ? "Görünür" : "Gizli")}");
         }
 
-        // ---- YardÄ±mcÄ±lar ----
+        // ---- Yardýmcýlar ----
 
         private async Task<JavascriptResponse> SafeEvaluateAsync(string script, CancellationToken ct)
         {
@@ -415,7 +417,7 @@ namespace Yolcu360.BusinessLayer.Concrete
             {
                 if (!_browser.CanExecuteJavascriptInMainFrame)
                 {
-                    // Sayfa JS Ã§alÄ±ÅŸtÄ±rmaya hazÄ±r deÄŸilse kÄ±saca bekle.
+                    // Sayfa JS çalýþtýrmaya hazýr deðilse kýsaca bekle.
                     var ready = await BrowserWaitHelper.PollUntilAsync(
                         () => Task.FromResult(_browser.CanExecuteJavascriptInMainFrame),
                         5, 200, ct);
@@ -430,7 +432,7 @@ namespace Yolcu360.BusinessLayer.Concrete
             }
             catch (Exception ex)
             {
-                LogHelper.Error("JavaScript Ã§alÄ±ÅŸtÄ±rma hatasÄ±.", ex);
+                LogHelper.Error("JavaScript çalýþtýrma hatasý.", ex);
                 return null;
             }
         }
@@ -438,7 +440,7 @@ namespace Yolcu360.BusinessLayer.Concrete
         private void EnsureInitialized()
         {
             if (!IsInitialized || _browser == null)
-                throw new InvalidOperationException("TarayÄ±cÄ± henÃ¼z baÅŸlatÄ±lmadÄ±. Ã–nce InitializeAsync Ã§aÄŸrÄ±lmalÄ±.");
+                throw new InvalidOperationException("Tarayýcý henüz baþlatýlmadý. Önce InitializeAsync çaðrýlmalý.");
         }
     }
 }

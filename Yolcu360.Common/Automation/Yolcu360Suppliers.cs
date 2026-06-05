@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Yolcu360.Common.Constants
+namespace Yolcu360.Common.Automation
 {
     /// <summary>
     /// Yolcu360 araç kartında firma yalnızca logo görseli olarak gösterilir (metin ad yoktur).

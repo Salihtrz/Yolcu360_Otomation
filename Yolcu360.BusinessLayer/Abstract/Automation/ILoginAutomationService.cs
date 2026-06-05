@@ -1,4 +1,4 @@
-namespace Yolcu360.BusinessLayer.Abstract
+namespace Yolcu360.BusinessLayer.Abstract.Automation
 {
     /// <summary>
     /// Yolcu360 telefon + SMS/OTP giriş akışını CefSharp üzerinde yürütür.

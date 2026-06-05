@@ -1,4 +1,4 @@
-namespace Yolcu360.Common.Constants
+namespace Yolcu360.Common.Automation
 {
     /// <summary>
     /// Firma değerlendirme / misafir yorumu okuma için DOM selector'ları.

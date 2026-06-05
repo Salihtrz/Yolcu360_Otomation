@@ -1,3 +1,6 @@
+using Yolcu360.BusinessLayer.Abstract.Automation;
+using Yolcu360.BusinessLayer.Abstract.Browser;
+using Yolcu360.Common.Automation;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -9,7 +12,7 @@ using Yolcu360.BusinessLayer.Abstract;
 using Yolcu360.Common.Logging;
 using Yolcu360.DataAccessLayer.Config;
 
-namespace Yolcu360.BusinessLayer.Concrete
+namespace Yolcu360.BusinessLayer.Concrete.Automation
 {
     /// <summary>
     /// Telefondaki MacroDroid'in gönderdiği 6 haneli OTP kodunu yerel ağ üzerinden alır.

@@ -14,12 +14,12 @@ namespace Yolcu360.PresentationLayer.Forms
     /// </summary>
     public class RentalSimulationHistoryForm : Form
     {
-        private readonly ISimulatedRentalService _service;
+        private readonly IRentalSimulationService _service;
         private readonly ISimulationPngService _pngService;
         private DataGridView _grid;
         private Label _lblInfo;
 
-        public RentalSimulationHistoryForm(ISimulatedRentalService service, ISimulationPngService pngService)
+        public RentalSimulationHistoryForm(IRentalSimulationService service, ISimulationPngService pngService)
         {
             _service = service;
             _pngService = pngService;
