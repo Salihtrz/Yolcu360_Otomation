@@ -889,8 +889,6 @@ namespace Yolcu360.PresentationLayer
         private async Task SearchCarsAsync()
         {
             var request = BuildSearchRequest();
-            // Geçmiş alış zamanı: site "bu saat diliminde arama yapılamaz" uyarısı verir ve sonuç
-            // gelmez. Kullanıcıyı baştan uyar.
             if (request.PickupDateTime <= DateTime.Now.AddMinutes(30))
             {
                 UiHelper.Warn("Alis tarihi/saati gecmiste veya cok yakin. Lutfen ileri bir tarih/saat secin.");

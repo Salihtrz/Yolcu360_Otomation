@@ -6,13 +6,8 @@ using Yolcu360.DtoLayer.CarResultDto;
 
 namespace Yolcu360.BusinessLayer.Concrete
 {
-    /// <summary>
-    /// Araç sonuçlarını başlıklı, çizgili bir tablo halinde PNG'ye çizer (System.Drawing).
-    /// Çizim UI thread'ini bloklamamak için Task.Run içinde yapılır.
-    /// </summary>
     public class PngReportManager : IPngReportService
     {
-        // Tablo sütunları: başlık + oransal genişlik.
         private static readonly (string Header, int Width)[] Columns =
         {
             ("Araç Modeli",      240),
@@ -73,7 +68,6 @@ namespace Yolcu360.BusinessLayer.Concrete
             using var titleFont = new Font("Segoe UI", 20, FontStyle.Bold);
             using var metaFont = new Font("Segoe UI", 11, FontStyle.Regular);
 
-            // Üst renkli şerit.
             g.FillRectangle(accent, 0, 0, width, 8);
 
             float y = Margin;
@@ -110,7 +104,6 @@ namespace Yolcu360.BusinessLayer.Concrete
             int y = Margin + HeaderBlockHeight;
             int tableWidth = Columns.Sum(c => c.Width);
 
-            // Tablo başlık satırı.
             g.FillRectangle(headerBg, x0, y, tableWidth, TableHeaderHeight);
             int cx = x0;
             foreach (var col in Columns)
@@ -129,7 +122,6 @@ namespace Yolcu360.BusinessLayer.Concrete
                 return;
             }
 
-            // Veri satırları.
             for (int i = 0; i < cars.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
@@ -158,7 +150,6 @@ namespace Yolcu360.BusinessLayer.Concrete
                 y += RowHeight;
             }
 
-            // Izgara çizgileri.
             int tableTop = Margin + HeaderBlockHeight;
             int tableBottom = y;
             cx = x0;

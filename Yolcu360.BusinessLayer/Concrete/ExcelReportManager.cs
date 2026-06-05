@@ -5,10 +5,6 @@ using Yolcu360.DtoLayer.CarResultDto;
 
 namespace Yolcu360.BusinessLayer.Concrete
 {
-    /// <summary>
-    /// Araç sonuçlarını biçimlendirilmiş bir Excel (.xlsx) dosyasına yazar (ClosedXML).
-    /// Başlık satırı, otomatik genişlik, fiyat sütununda sayı biçimi ve özet satırı içerir.
-    /// </summary>
     public class ExcelReportManager : IExcelReportService
     {
         private static readonly string[] Headers =
@@ -28,7 +24,6 @@ namespace Yolcu360.BusinessLayer.Concrete
                 using var wb = new XLWorkbook();
                 var ws = wb.Worksheets.Add("Araçlar");
 
-                // Başlık (rapor adı)
                 ws.Cell(1, 1).Value = $"Yolcu360 Araç Kiralama Raporu - {reportName}";
                 ws.Range(1, 1, 1, Headers.Length).Merge();
                 ws.Cell(1, 1).Style.Font.Bold = true;
@@ -37,7 +32,6 @@ namespace Yolcu360.BusinessLayer.Concrete
                 ws.Cell(1, 1).Style.Font.FontColor = XLColor.White;
                 ws.Cell(1, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-                // Sütun başlıkları (3. satır)
                 const int headerRow = 3;
                 for (int c = 0; c < Headers.Length; c++)
                 {
@@ -48,7 +42,6 @@ namespace Yolcu360.BusinessLayer.Concrete
                     cell.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
                 }
 
-                // Veri satırları
                 int row = headerRow + 1;
                 foreach (var car in cars)
                 {
@@ -71,7 +64,6 @@ namespace Yolcu360.BusinessLayer.Concrete
                     row++;
                 }
 
-                // Özet satırı
                 if (cars.Count > 0)
                 {
                     ws.Cell(row + 1, 1).Value = "Toplam araç:";

@@ -6,11 +6,6 @@ using Yolcu360.DtoLayer.SimulationDto;
 
 namespace Yolcu360.BusinessLayer.Concrete
 {
-    /// <summary>
-    /// Kiralama simülasyon özetini bölümlü bir PNG belgesine çizer (System.Drawing). Çizim,
-    /// UI thread'ini bloklamamak için Task.Run içinde yapılır. PII (TC/telefon/e-posta) belgeye
-    /// yazılır ama LOGA yazılmaz.
-    /// </summary>
     public class SimulationPngManager : ISimulationPngService
     {
         private const int Width = 720;
@@ -24,7 +19,6 @@ namespace Yolcu360.BusinessLayer.Concrete
             {
                 ct.ThrowIfCancellationRequested();
 
-                // Bölümler ve satırlar.
                 var carLines = new[]
                 {
                     ("Araç", $"{Safe(s.CarModel)}  ({Safe(s.RentalCompany)})"),
@@ -52,14 +46,13 @@ namespace Yolcu360.BusinessLayer.Concrete
                     ("Ödeme Yöntemi", Safe(s.PaymentMethod)),
                 };
 
-                // Yükseklik hesabı.
                 int lineH = 26, sectionGap = 16, headerH = 132;
                 int height = Margin + headerH
                     + SectionHeight(carLines.Length, lineH) + sectionGap
                     + SectionHeight(driverLines.Length, lineH) + sectionGap
                     + SectionHeight(Math.Max(extras.Count, 1) + 1, lineH) + sectionGap
                     + SectionHeight(priceLines.Length, lineH) + sectionGap
-                    + 60   // disclaimer
+                    + 60
                     + Margin;
 
                 using var bmp = new Bitmap(Width, height);
